@@ -93,6 +93,9 @@
   .book::before{content:"";position:absolute;left:7px;top:15px;bottom:15px;width:2px;background:#ffffff18;border-radius:2px}
   .book .ribbon{position:absolute;top:-3px;right:24px;width:13px;height:56px;background:var(--foil);border-radius:0 0 3px 3px;box-shadow:0 4px 7px rgba(0,0,0,.45);z-index:5}
   .book{overflow:hidden}
+  .book.realcover{padding:0}
+  .book.realcover .bkphoto{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+  .book.realcover::before{z-index:2}
   .book .bkart{position:absolute;inset:0;z-index:0;overflow:hidden}
   .book .bkend{position:absolute;left:0;top:0;bottom:0;width:11px;z-index:3;background:var(--bkacc,var(--foil));box-shadow:inset -2px 0 3px rgba(0,0,0,.4)}
   .book .bkcap{position:absolute;left:0;right:0;height:20px;z-index:2;background:var(--bkcap,transparent)}
@@ -721,7 +724,7 @@
   </header>
 
   <div class="cabinet">
-    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v44</div>
+    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v45</div>
     <div class="hero" id="hero"></div>
 
     <input type="search" id="q" class="search" placeholder="Search title or author" aria-label="Search titles and authors">
@@ -1099,12 +1102,17 @@ function buildHeroCard(sName,b){
   _art+='<span style="position:absolute;inset:0;background:linear-gradient('+(60+_hh%80)+'deg,'+_foil+'22,transparent 55%)"></span>';
   const capHtml = hasBand(_seed) ? '<span class="bkcap t"></span><span class="bkcap b"></span>' : '';
   book.style.setProperty('--bkcap', hasBand(_seed)?(bandIsFoil(_seed)?_foil:(_light?'rgba(0,0,0,.26)':'rgba(0,0,0,.4)')):'transparent');
-  book.innerHTML='<span class="bkart">'+_art+'</span><span class="bkend"></span>'+capHtml+
-    '<span class="ribbon"></span><span class="bkorn">'+ornFor(_seed)+'</span>'+
-    '<div class="frame"><div class="bt"></div><div class="ba"></div></div><div class="bseries"></div>';
-  book.querySelector('.bt').textContent=b.title;
-  book.querySelector('.ba').textContent=_auth;
-  book.querySelector('.bseries').textContent=sName+(num?' \u00b7 Book '+num:'');
+  if(d.cover){
+    book.classList.add('realcover');
+    book.innerHTML='<img class="bkphoto" src="'+d.cover+'" alt="Cover of '+b.title.replace(/"/g,'&quot;')+'">';
+  } else {
+    book.innerHTML='<span class="bkart">'+_art+'</span><span class="bkend"></span>'+capHtml+
+      '<span class="ribbon"></span><span class="bkorn">'+ornFor(_seed)+'</span>'+
+      '<div class="frame"><div class="bt"></div><div class="ba"></div></div><div class="bseries"></div>';
+    book.querySelector('.bt').textContent=b.title;
+    book.querySelector('.ba').textContent=_auth;
+    book.querySelector('.bseries').textContent=sName+(num?' \u00b7 Book '+num:'');
+  }
 
   const meta=document.createElement('div'); meta.className='fmeta';
   const k=document.createElement('div'); k.className='k'; k.textContent=sName+(num?' \u00b7 Book '+num:'');
@@ -1145,7 +1153,13 @@ function buildHeroCard(sName,b){
   fin.onclick=()=>openFinishModal(id);
   const jump=document.createElement('button'); jump.className='btn-ghost'; jump.textContent='Go to shelf';
   jump.onclick=()=>jumpTo(id);
-  acts.append(fin,jump); meta.appendChild(acts);
+  const coverBtn=document.createElement('button'); coverBtn.className='btn-ghost'; coverBtn.type='button';
+  coverBtn.textContent = d.cover ? 'Remove cover' : 'Cover art';
+  coverBtn.title = d.cover ? 'Remove the cover pulled from your EPUB' : 'Pull a cover image from an EPUB file';
+  const coverInput=document.createElement('input'); coverInput.type='file'; coverInput.accept='.epub,application/epub+zip'; coverInput.hidden=true;
+  coverInput.addEventListener('change',()=>{ const f=coverInput.files[0]; coverInput.value=''; if(f) attachCoverFromEpub(id,f); });
+  coverBtn.onclick=()=>{ if(d.cover){ delete d.cover; touch(id); sDet(); renderHero(); toast('Cover removed.'); } else { coverInput.click(); } };
+  acts.append(fin,jump,coverBtn,coverInput); meta.appendChild(acts);
 
   const flap=document.createElement('span'); flap.className='flap'; flap.textContent='Currently Reading';
   art.append(flap,book,meta);
@@ -1631,6 +1645,7 @@ function applyStatus(id,next){
     if(next==='reading' && !d.started) d.started=today();
     if(next==='read' && !d.finished) d.finished=today();
   }
+  clearCoverIfDone(id);
   touch(id); sSt(); sDet(); buildList(); render();
 }
 /* a re-read pushes the previous finish onto the history stack and reopens the book */
@@ -1648,7 +1663,7 @@ function setReadEntry(id,i,patch){ const d=det(id); if(!d.reads||!d.reads[i]) re
 function removeReadEntry(id,i){ const d=det(id); if(!d.reads||!d.reads[i]) return;
   d.reads.splice(i,1); if(!d.reads.length) delete d.reads;
   touch(id); sDet(); render(); toast('Removed a previous read.'); }
-function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today(); sSt(); sDet(); render();
+function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today(); clearCoverIfDone(id); sSt(); sDet(); render();
   toast('Marked finished \u2713'); }
 
 /* reading streak: any calendar day with a page update, a start, or a finish counts as
@@ -1670,6 +1685,107 @@ function renderStreak(){
   const el=document.getElementById('cStreak'); if(!el) return;
   const n=currentStreak();
   el.textContent = n>=2 ? ' \u00b7 \ud83d\udd25 '+n+'-day streak' : '';
+}
+/* ---------------- COVER ART FROM EPUB (hero card only, cleared once you're not reading) ---------------- */
+/* a cover only ever exists while a book is "reading"; the moment status moves away from
+   that, delete it so it never lingers in storage or in the sync payload */
+function clearCoverIfDone(id){ const d=details[id]; if(d && d.cover && statusOf(id)!=='reading'){ delete d.cover; sDet(); } }
+
+/* minimal zip reader: just enough to walk an epub's central directory and pull one file
+   out by name. epub is a plain zip, so this is the whole trick \u2014 no library needed. */
+async function zipEntries(buf){
+  const view=new DataView(buf), bytes=new Uint8Array(buf);
+  let eocd=-1;
+  for(let i=bytes.length-22; i>=Math.max(0,bytes.length-22-65557); i--){
+    if(view.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
+  if(eocd<0) throw new Error('Not a zip file');
+  const cdOffset=view.getUint32(eocd+16,true), cdCount=view.getUint16(eocd+10,true);
+  const entries=[]; let off=cdOffset;
+  for(let i=0;i<cdCount;i++){
+    if(view.getUint32(off,true)!==0x02014b50) break;
+    const compMethod=view.getUint16(off+10,true), compSize=view.getUint32(off+20,true),
+      nameLen=view.getUint16(off+28,true), extraLen=view.getUint16(off+30,true), commentLen=view.getUint16(off+32,true),
+      localOff=view.getUint32(off+42,true);
+    const name=new TextDecoder().decode(bytes.slice(off+46,off+46+nameLen));
+    entries.push({name,compMethod,compSize,localOff});
+    off+=46+nameLen+extraLen+commentLen;
+  }
+  async function extract(entry){
+    if(view.getUint32(entry.localOff,true)!==0x04034b50) throw new Error('Bad zip entry');
+    const nameLen=view.getUint16(entry.localOff+26,true), extraLen=view.getUint16(entry.localOff+28,true);
+    const start=entry.localOff+30+nameLen+extraLen;
+    const raw=bytes.slice(start,start+entry.compSize);
+    if(entry.compMethod===0) return raw;
+    if(entry.compMethod===8){
+      const ds=new DecompressionStream('deflate-raw');
+      const writer=ds.writable.getWriter(); writer.write(raw); writer.close();
+      const chunks=[]; const reader=ds.readable.getReader();
+      while(true){ const {done,value}=await reader.read(); if(done) break; chunks.push(value); }
+      const total=chunks.reduce((a,c)=>a+c.length,0); const out=new Uint8Array(total); let p=0;
+      chunks.forEach(c=>{ out.set(c,p); p+=c.length; }); return out;
+    }
+    throw new Error('Unsupported compression in this EPUB');
+  }
+  return {entries, extract, find:(name)=>entries.find(e=>e.name===name)};
+}
+function resolveEpubPath(base,href){
+  const dir=base.includes('/')?base.slice(0,base.lastIndexOf('/')+1):'';
+  const parts=(dir+href).split('/'), out=[];
+  parts.forEach(seg=>{ if(seg==='..') out.pop(); else if(seg!=='.'&&seg!=='') out.push(seg); });
+  return out.join('/');
+}
+async function extractEpubCover(file){
+  const buf=await file.arrayBuffer();
+  const zip=await zipEntries(buf);
+  const containerEntry=zip.find('META-INF/container.xml');
+  if(!containerEntry) throw new Error('That doesn\u2019t look like a valid EPUB.');
+  const containerXml=new TextDecoder().decode(await zip.extract(containerEntry));
+  const containerDoc=new DOMParser().parseFromString(containerXml,'application/xml');
+  const rootfile=containerDoc.querySelector('rootfile'); if(!rootfile) throw new Error('No content file listed in this EPUB.');
+  const opfPath=rootfile.getAttribute('full-path');
+  const opfEntry=zip.find(opfPath); if(!opfEntry) throw new Error('EPUB content file is missing.');
+  const opfXml=new TextDecoder().decode(await zip.extract(opfEntry));
+  const opfDoc=new DOMParser().parseFromString(opfXml,'application/xml');
+  let coverHref=null;
+  const item3=opfDoc.querySelector('item[properties~="cover-image"]');
+  if(item3) coverHref=item3.getAttribute('href');
+  if(!coverHref){ const metaCover=opfDoc.querySelector('meta[name="cover"]');
+    if(metaCover){ const cid=metaCover.getAttribute('content');
+      const item=[...opfDoc.querySelectorAll('item')].find(it=>it.getAttribute('id')===cid);
+      if(item) coverHref=item.getAttribute('href'); } }
+  if(!coverHref){ const guess=[...opfDoc.querySelectorAll('item')].find(it=>
+      /cover/i.test(it.getAttribute('id')||'') && /^image\//.test(it.getAttribute('media-type')||''));
+    if(guess) coverHref=guess.getAttribute('href'); }
+  if(!coverHref) throw new Error('No cover image found inside this EPUB.');
+  const imgPath=resolveEpubPath(opfPath,coverHref);
+  const imgEntry=zip.find(imgPath)||zip.find(coverHref);
+  if(!imgEntry) throw new Error('Cover image is listed but missing from the file.');
+  const imgData=await zip.extract(imgEntry);
+  const ext=imgPath.split('.').pop().toLowerCase();
+  const mime= ext==='png'?'image/png' : ext==='gif'?'image/gif' : ext==='webp'?'image/webp' : 'image/jpeg';
+  return new Blob([imgData],{type:mime});
+}
+/* shrink to a small, sync-friendly jpeg \u2014 covers only ever live for as long as a book
+   is actively being read, but keep them cheap regardless */
+async function resizeCoverToDataUrl(blob,maxW,maxH){
+  const bitmap=await createImageBitmap(blob);
+  const scale=Math.min(maxW/bitmap.width, maxH/bitmap.height, 1);
+  const w=Math.max(1,Math.round(bitmap.width*scale)), h=Math.max(1,Math.round(bitmap.height*scale));
+  const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d'); ctx.drawImage(bitmap,0,0,w,h);
+  return new Promise((resolve,reject)=>{ canvas.toBlob(b=>{ if(!b){ reject(new Error('Could not process that image.')); return; }
+    const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error('Could not read the image.'));
+    reader.readAsDataURL(b); }, 'image/jpeg', 0.78); });
+}
+async function attachCoverFromEpub(id,file){
+  try{
+    toast('Reading cover from EPUB\u2026');
+    const blob=await extractEpubCover(file);
+    const dataUrl=await resizeCoverToDataUrl(blob,340,500);
+    if(statusOf(id)!=='reading'){ toast('This book is no longer marked as reading \u2014 cover not saved.'); return; }
+    det(id).cover=dataUrl; touch(id); sDet(); renderHero();
+    toast('Cover added \u2713');
+  }catch(err){ toast(err&&err.message ? err.message : 'Couldn\u2019t read a cover from that file.'); }
 }
 function bookById(id){ for(const s of catalog.series){ for(const b of s.books){ if(idOf(s.series,b)===id) return {s,b}; } } return null; }
 /* re-run decorateSpine on just one book's row, so rating/page edits update the
@@ -1720,6 +1836,7 @@ function openFinishModal(id){
   save.onclick=()=>{ status[id]='read'; det(id).finished=dateInp.value||today();
     if(chosen>0) ratings[id]=chosen; else delete ratings[id];
     const nv=notesTa.value.trim(); if(nv) det(id).notes=nv; else delete det(id).notes;
+    clearCoverIfDone(id);
     touch(id); sSt(); sRt(); sDet(); close(); buildList(); render();
     offerNextInSeries(id); };
 
@@ -2468,6 +2585,7 @@ function applyPayload(p){ applyingRemote=true;
   catalog=p.catalog||{series:[]}; status=p.status||{}; ratings=p.ratings||{}; details=p.details||{};
   dataUpdatedAt=+p.updatedAt||Date.now(); try{localStorage.setItem(K_UPD,String(dataUpdatedAt));}catch(e){}
   normalizeCatalog();
+  Object.keys(details).forEach(id=>{ if(details[id] && details[id].cover && statusOf(id)!=='reading') delete details[id].cover; });
   sCat(); sSt(); sRt(); sDet(); applyingRemote=false;
   collapsed.clear(); catalog.series.forEach(s=>{ if(s.series!=='Standalone') collapsed.add(s.series); });
   buildList(); render(); }
@@ -2524,6 +2642,9 @@ function mergeRemote(R){
       if(v!==undefined) out[k]=v; });
     return out; };
   status=mergeMap(status,R.status); ratings=mergeMap(ratings,R.ratings); details=mergeMap(details,R.details);
+  /* a status change made on another device skips the local cleanup helpers entirely,
+     so sweep for any cover that's no longer attached to a "reading" book */
+  Object.keys(details).forEach(id=>{ if(details[id] && details[id].cover && statusOf(id)!=='reading') delete details[id].cover; });
 
   const t={}, del={};
   [...new Set([...Object.keys(meta.t||{}),...Object.keys(rm.t||{})])].forEach(k=>{ const v=Math.max(LT(k),RT(k)); if(v) t[k]=v; });
