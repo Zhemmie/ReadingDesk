@@ -724,7 +724,7 @@
   </header>
 
   <div class="cabinet">
-    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v45</div>
+    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v46</div>
     <div class="hero" id="hero"></div>
 
     <input type="search" id="q" class="search" placeholder="Search title or author" aria-label="Search titles and authors">
@@ -1153,13 +1153,7 @@ function buildHeroCard(sName,b){
   fin.onclick=()=>openFinishModal(id);
   const jump=document.createElement('button'); jump.className='btn-ghost'; jump.textContent='Go to shelf';
   jump.onclick=()=>jumpTo(id);
-  const coverBtn=document.createElement('button'); coverBtn.className='btn-ghost'; coverBtn.type='button';
-  coverBtn.textContent = d.cover ? 'Remove cover' : 'Cover art';
-  coverBtn.title = d.cover ? 'Remove the cover pulled from your EPUB' : 'Pull a cover image from an EPUB file';
-  const coverInput=document.createElement('input'); coverInput.type='file'; coverInput.accept='.epub,application/epub+zip'; coverInput.hidden=true;
-  coverInput.addEventListener('change',()=>{ const f=coverInput.files[0]; coverInput.value=''; if(f) attachCoverFromEpub(id,f); });
-  coverBtn.onclick=()=>{ if(d.cover){ delete d.cover; touch(id); sDet(); renderHero(); toast('Cover removed.'); } else { coverInput.click(); } };
-  acts.append(fin,jump,coverBtn,coverInput); meta.appendChild(acts);
+  acts.append(fin,jump); meta.appendChild(acts);
 
   const flap=document.createElement('span'); flap.className='flap'; flap.textContent='Currently Reading';
   art.append(flap,book,meta);
@@ -1486,6 +1480,15 @@ function buildDetail(s,b,id,standalone){
     nx.title='Keep this on the short list under Currently reading';
     if(d.next) nx.setAttribute('aria-pressed','true');
     nx.onclick=()=>toggleNext(id); stActs.appendChild(nx); }
+  if(st==='reading'){
+    const coverBtn=document.createElement('button'); coverBtn.type='button'; coverBtn.className='dact ghost';
+    coverBtn.textContent = d.cover ? 'Remove cover' : 'Cover art';
+    coverBtn.title = d.cover ? 'Remove the cover pulled from your EPUB' : 'Pull a cover image from an EPUB file \u2014 shown while you\u2019re reading it';
+    const coverInput=document.createElement('input'); coverInput.type='file'; coverInput.accept='.epub,application/epub+zip'; coverInput.hidden=true;
+    coverInput.addEventListener('change',()=>{ const f=coverInput.files[0]; coverInput.value=''; if(f) attachCoverFromEpub(id,f); });
+    coverBtn.onclick=()=>{ if(d.cover){ delete d.cover; touch(id); sDet(); buildList(); render(); toast('Cover removed.'); } else { coverInput.click(); } };
+    stActs.append(coverBtn,coverInput);
+  }
   if(stActs.children.length) stWrap.appendChild(stActs);
 
   /* editable rating, right here in the card */
@@ -1783,7 +1786,7 @@ async function attachCoverFromEpub(id,file){
     const blob=await extractEpubCover(file);
     const dataUrl=await resizeCoverToDataUrl(blob,340,500);
     if(statusOf(id)!=='reading'){ toast('This book is no longer marked as reading \u2014 cover not saved.'); return; }
-    det(id).cover=dataUrl; touch(id); sDet(); renderHero();
+    det(id).cover=dataUrl; touch(id); sDet(); buildList(); render();
     toast('Cover added \u2713');
   }catch(err){ toast(err&&err.message ? err.message : 'Couldn\u2019t read a cover from that file.'); }
 }
