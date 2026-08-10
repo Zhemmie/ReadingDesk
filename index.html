@@ -724,7 +724,7 @@
   </header>
 
   <div class="cabinet">
-    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v46</div>
+    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v47</div>
     <div class="hero" id="hero"></div>
 
     <input type="search" id="q" class="search" placeholder="Search title or author" aria-label="Search titles and authors">
@@ -866,18 +866,36 @@
 <script>
 const SEED = {"series":[]};
 const K_CAT='rl.catalog.v2', K_ST='readinglist.v1', K_RT='readinglist.ratings.v1', K_DET='rl.details.v1';
-const K_UPD='rl.updatedAt', K_META='rl.meta.v1', K_BKUP='rl.lastBackupAt';
+const K_UPD='rl.updatedAt', K_META='rl.meta.v1', K_BKUP='rl.lastBackupAt', K_DAYS='rl.activedays.v1';
 const SK_TOKEN='rl.sync.token', SK_GIST='rl.sync.gist', SK_LAST='rl.sync.lastAt';
 const ORDER=['unread','reading','read','dnf'];
 const ST_LABEL={unread:'Unread',reading:'Reading',read:'Read',dnf:'Set aside'};
 
-let mem=false, status={}, ratings={}, details={}, catalog, meta;
+let mem=false, status={}, ratings={}, details={}, catalog, meta, activeDays={};
 try{ status=JSON.parse(localStorage.getItem(K_ST)||'{}'); }catch(e){ status={}; mem=true; }
 try{ ratings=JSON.parse(localStorage.getItem(K_RT)||'{}'); }catch(e){ ratings={}; }
 try{ details=JSON.parse(localStorage.getItem(K_DET)||'{}'); }catch(e){ details={}; }
 try{ const s=localStorage.getItem(K_CAT); catalog=s?JSON.parse(s):structuredClone(SEED); }catch(e){ catalog=structuredClone(SEED); }
 try{ meta=JSON.parse(localStorage.getItem(K_META)||'{"t":{},"del":{}}'); }catch(e){ meta={t:{},del:{}}; }
 if(!meta.t) meta.t={}; if(!meta.del) meta.del={}; if(!meta.devices) meta.devices={};
+/* an append-only log of "you did something reading-related today" \u2014 kept independent of any
+   single book's fields so a later update can never silently erase an earlier day's evidence
+   (that used to happen: re-reading the same book on a later day overwrote its one pcurAt
+   timestamp, quietly erasing the record that you'd also read it on an earlier day) */
+let daysLoadedFresh=true;
+try{ const raw=localStorage.getItem(K_DAYS); if(raw!==null){ activeDays=JSON.parse(raw); daysLoadedFresh=false; } }catch(e){ activeDays={}; }
+function saveDays(){ if(!mem){ try{ localStorage.setItem(K_DAYS,JSON.stringify(activeDays)); }catch(e){} } }
+function markActiveToday(){ const day=ymd(new Date()); if(!activeDays[day]){ activeDays[day]=true; saveDays(); onDataSaved(); } }
+/* one-time backfill on first run after this fix, from whatever the old (lossy) snapshot
+   fields still show \u2014 better than resetting everyone's streak to zero */
+if(daysLoadedFresh){
+  Object.values(details).forEach(d=>{
+    if(d && d.pcurAt){ const dt=new Date(d.pcurAt); activeDays[ymd(dt)]=true; }
+    if(d && d.started) activeDays[d.started]=true;
+    if(d && d.finished) activeDays[d.finished]=true;
+  });
+  saveDays();
+}
 
 /* stable ids: assigned once, never derived from text, so renames never orphan data */
 function newId(p){ return p+Date.now().toString(36)+Math.random().toString(36).slice(2,9); }
@@ -1648,6 +1666,7 @@ function applyStatus(id,next){
     if(next==='reading' && !d.started) d.started=today();
     if(next==='read' && !d.finished) d.finished=today();
   }
+  if(next==='reading' || next==='read') markActiveToday();
   clearCoverIfDone(id);
   touch(id); sSt(); sDet(); buildList(); render();
 }
@@ -1656,6 +1675,7 @@ function startReread(id){
   const d=det(id);
   if(d.finished){ d.reads=d.reads||[]; d.reads.push({finished:d.finished, rating:ratings[id]||undefined}); }
   delete d.finished; d.started=today(); status[id]='reading';
+  markActiveToday();
   touch(id); sSt(); sDet(); buildList(); render(); toast('Reading again \u2014 previous finish kept in history.');
 }
 function setReadEntry(id,i,patch){ const d=det(id); if(!d.reads||!d.reads[i]) return;
@@ -1666,19 +1686,13 @@ function setReadEntry(id,i,patch){ const d=det(id); if(!d.reads||!d.reads[i]) re
 function removeReadEntry(id,i){ const d=det(id); if(!d.reads||!d.reads[i]) return;
   d.reads.splice(i,1); if(!d.reads.length) delete d.reads;
   touch(id); sDet(); render(); toast('Removed a previous read.'); }
-function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today(); clearCoverIfDone(id); sSt(); sDet(); render();
+function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today(); markActiveToday(); clearCoverIfDone(id); sSt(); sDet(); render();
   toast('Marked finished \u2713'); }
 
 /* reading streak: any calendar day with a page update, a start, or a finish counts as
    "active" \u2014 computed entirely from data already stored, no new schema needed */
 function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function activeDates(){ const set=new Set();
-  Object.values(details).forEach(d=>{
-    if(d.pcurAt) set.add(ymd(new Date(d.pcurAt)));
-    if(d.started) set.add(d.started);
-    if(d.finished) set.add(d.finished);
-  });
-  return set; }
+function activeDates(){ return new Set(Object.keys(activeDays)); }
 function currentStreak(){
   const dates=activeDates(); const today=new Date(); let d=new Date(today);
   if(!dates.has(ymd(d))) d.setDate(d.getDate()-1);   /* today not yet logged \u2014 grace, check from yesterday */
@@ -1839,6 +1853,7 @@ function openFinishModal(id){
   save.onclick=()=>{ status[id]='read'; det(id).finished=dateInp.value||today();
     if(chosen>0) ratings[id]=chosen; else delete ratings[id];
     const nv=notesTa.value.trim(); if(nv) det(id).notes=nv; else delete det(id).notes;
+    markActiveToday();
     clearCoverIfDone(id);
     touch(id); sSt(); sRt(); sDet(); close(); buildList(); render();
     offerNextInSeries(id); };
@@ -2214,11 +2229,11 @@ function setRating(id,i){ if(ratings[id]===i) delete ratings[id]; else ratings[i
 function setPages(id,which,val){ const d=det(id);
   const v=(val===''||val==null)?undefined:Math.max(0,parseInt(val,10)||0);
   if(v===undefined) delete d[which]; else d[which]=v;
-  if(which==='pcur'){ if(v===undefined) delete d.pcurAt; else d.pcurAt=Date.now(); }
+  if(which==='pcur'){ if(v===undefined) delete d.pcurAt; else { d.pcurAt=Date.now(); markActiveToday(); } }
   touch(id); sDet();
   const card=document.querySelector('.card[data-id="'+String(id).replace(/"/g,'\\"')+'"] .detail');
   if(card){ const pg=card.querySelectorAll('input.pg'); if(pg.length===2){ pg[0].value=d.pcur||''; pg[1].value=d.ptot||''; } }
-  redecorate(id); renderHero(); }
+  redecorate(id); renderHero(); renderStreak(); }
 
 function insertByNumber(books,entry){
   const v=parseNum(entry.num); let i=0;
@@ -2578,7 +2593,7 @@ function hasAnyBooks(){ return catalog.series.some(s=>s.books.length>0); }
 if(!dataUpdatedAt && hasAnyBooks()){ dataUpdatedAt=Date.now(); try{localStorage.setItem(K_UPD,String(dataUpdatedAt));}catch(e){} }
 
 function syncPayload(){ return {version:5, updatedAt:dataUpdatedAt, meta, catalog}; }
-function progressPayload(){ return {version:5, updatedAt:dataUpdatedAt, status, ratings, details}; }
+function progressPayload(){ return {version:5, updatedAt:dataUpdatedAt, status, ratings, details, activeDays}; }
 
 function isIdd(cat){ return !!(cat && Array.isArray(cat.series) &&
   cat.series.every(s=>s.sid && (s.books||[]).every(b=>b.id))); }
@@ -2586,6 +2601,7 @@ function isIdd(cat){ return !!(cat && Array.isArray(cat.series) &&
 /* legacy fallback: a device still on the old format overwrites wholesale by timestamp */
 function applyPayload(p){ applyingRemote=true;
   catalog=p.catalog||{series:[]}; status=p.status||{}; ratings=p.ratings||{}; details=p.details||{};
+  activeDays=Object.assign({}, activeDays, p.activeDays||{}); saveDays();
   dataUpdatedAt=+p.updatedAt||Date.now(); try{localStorage.setItem(K_UPD,String(dataUpdatedAt));}catch(e){}
   normalizeCatalog();
   Object.keys(details).forEach(id=>{ if(details[id] && details[id].cover && statusOf(id)!=='reading') delete details[id].cover; });
@@ -2645,6 +2661,9 @@ function mergeRemote(R){
       if(v!==undefined) out[k]=v; });
     return out; };
   status=mergeMap(status,R.status); ratings=mergeMap(ratings,R.ratings); details=mergeMap(details,R.details);
+  /* activeDays only ever grows: a day marked active on either device stays active, no
+     timestamp/tombstone logic needed \u2014 just union the two sets */
+  activeDays=Object.assign({}, activeDays, R.activeDays||{}); saveDays();
   /* a status change made on another device skips the local cleanup helpers entirely,
      so sweep for any cover that's no longer attached to a "reading" book */
   Object.keys(details).forEach(id=>{ if(details[id] && details[id].cover && statusOf(id)!=='reading') delete details[id].cover; });
