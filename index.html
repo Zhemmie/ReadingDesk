@@ -610,6 +610,7 @@
   .modal input[type=date],.modal textarea{background:var(--creme-hi);border:1px solid var(--card-edge);color:var(--ink);
     font-family:var(--mono);font-size:13px;padding:9px 11px;border-radius:3px;width:100%}
   .modal textarea{min-height:96px;resize:vertical;line-height:1.5}
+  .notesmodal-ta{min-height:160px}
   .modal.wide{max-width:520px}
   body[data-mode="night"] .modal{background:linear-gradient(180deg,#0a1420,#050a12);color:var(--ink,#eaffff);
     box-shadow:0 0 40px -10px rgba(45,231,255,.2), inset 0 0 0 1px #133247}
@@ -724,7 +725,7 @@
   </header>
 
   <div class="cabinet">
-    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v47</div>
+    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v48</div>
     <div class="hero" id="hero"></div>
 
     <input type="search" id="q" class="search" placeholder="Search title or author" aria-label="Search titles and authors">
@@ -1171,7 +1172,11 @@ function buildHeroCard(sName,b){
   fin.onclick=()=>openFinishModal(id);
   const jump=document.createElement('button'); jump.className='btn-ghost'; jump.textContent='Go to shelf';
   jump.onclick=()=>jumpTo(id);
-  acts.append(fin,jump); meta.appendChild(acts);
+  const notesBtn=document.createElement('button'); notesBtn.className='btn-ghost'; notesBtn.type='button';
+  notesBtn.textContent = d.notes ? 'Notes \u2713' : 'Notes';
+  notesBtn.title='Jot down thoughts, quotes, or where you left off';
+  notesBtn.onclick=()=>openNotesModal(id,b.title);
+  acts.append(fin,jump,notesBtn); meta.appendChild(acts);
 
   const flap=document.createElement('span'); flap.className='flap'; flap.textContent='Currently Reading';
   art.append(flap,book,meta);
@@ -1813,6 +1818,38 @@ function redecorate(id){
   decorateSpine(row.spine, found.s, found.b, id, found.s.series==='Standalone');
   paintStars(row.starEls, ratings[id]||0);
 }
+/* the notes popup and the detail card's textarea are the same field, not two fields
+   kept in sync \u2014 both just read/write det(id).notes live, same as each other */
+function openNotesModal(id,titleText){
+  const d=det(id);
+  const back=document.createElement('div'); back.className='modal-backdrop';
+  const m=document.createElement('div'); m.className='modal'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true');
+  const h=document.createElement('h3'); h.textContent='Notes';
+  const sub=document.createElement('div'); sub.className='sub'; sub.textContent=titleText;
+  m.append(h,sub);
+
+  const nt=document.createElement('textarea'); nt.value=d.notes||''; nt.className='notesmodal-ta';
+  nt.placeholder='Thoughts, quotes, where you left off\u2026'; nt.setAttribute('aria-label','Notes for '+titleText);
+  nt.oninput=()=>{
+    det(id).notes=nt.value||undefined; touch(id); sDet();
+    /* keep an already-open detail card's textarea in sync rather than going stale */
+    const openTa=document.querySelector('.bk[data-id="'+String(id).replace(/"/g,'\\"')+'"] .fld.notes textarea');
+    if(openTa && openTa!==nt){ openTa.value=nt.value; if(openTa._autosize) openTa._autosize(); }
+  };
+  m.appendChild(nt);
+
+  const act=document.createElement('div'); act.className='mact';
+  const close=document.createElement('button'); close.className='cancel'; close.textContent='Close';
+  act.appendChild(close); m.appendChild(act);
+  const shut=()=>{ back.remove(); document.removeEventListener('keydown',onkey); };
+  function onkey(e){ if(e.key==='Escape') shut(); }
+  document.addEventListener('keydown',onkey);
+  back.addEventListener('mousedown',e=>{ if(e.target===back) shut(); });
+  close.onclick=shut;
+  back.appendChild(m); document.body.appendChild(back); trapFocus(m);
+  setTimeout(()=>nt.focus(),0);
+}
+
 function openFinishModal(id){
   const found=bookById(id); if(!found){ markRead(id); return; }
   const {s,b}=found; const d=det(id);
@@ -2231,7 +2268,7 @@ function setPages(id,which,val){ const d=det(id);
   if(v===undefined) delete d[which]; else d[which]=v;
   if(which==='pcur'){ if(v===undefined) delete d.pcurAt; else { d.pcurAt=Date.now(); markActiveToday(); } }
   touch(id); sDet();
-  const card=document.querySelector('.card[data-id="'+String(id).replace(/"/g,'\\"')+'"] .detail');
+  const card=document.querySelector('.bk[data-id="'+String(id).replace(/"/g,'\\"')+'"] .detail');
   if(card){ const pg=card.querySelectorAll('input.pg'); if(pg.length===2){ pg[0].value=d.pcur||''; pg[1].value=d.ptot||''; } }
   redecorate(id); renderHero(); renderStreak(); }
 
