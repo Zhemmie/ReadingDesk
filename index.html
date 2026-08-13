@@ -725,7 +725,7 @@
   </header>
 
   <div class="cabinet">
-    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v48</div>
+    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v49</div>
     <div class="hero" id="hero"></div>
 
     <input type="search" id="q" class="search" placeholder="Search title or author" aria-label="Search titles and authors">
@@ -2795,7 +2795,7 @@ async function pullRemote(){ const r=await ghFetch('https://api.github.com/gists
   const j=await r.json();
   const head=await readGistFile(j,GIST_FILE); if(!head) return null;
   const prog=await readGistFile(j,GIST_PROG);
-  if(prog){ head.status=prog.status; head.ratings=prog.ratings; head.details=prog.details;
+  if(prog){ head.status=prog.status; head.ratings=prog.ratings; head.details=prog.details; head.activeDays=prog.activeDays;
     head.updatedAt=Math.max(+head.updatedAt||0, +prog.updatedAt||0); }
   return head; }
 function markSynced(){ lastSyncAt=Date.now(); try{localStorage.setItem(SK_LAST,String(lastSyncAt));}catch(e){} }
