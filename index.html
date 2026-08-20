@@ -399,6 +399,9 @@
     transition:transform .16s}
   .bk:first-child .spine{margin-top:0}
   .spine.patina{filter:saturate(.92) sepia(.10)}
+  /* manga: a fixed, consistent accent border (not series-seeded) so manga reads as its own
+     category across the whole shelf, distinct from the series-colour system */
+  .spine.manga{border:2px solid #a8342a; box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -4px 8px -4px rgba(0,0,0,.6), 0 3px 6px -3px rgba(0,0,0,.55), 0 0 0 1px rgba(168,52,42,.35)}
   /* author end-band on the binding edge (#13) */
   .spine .spend{position:absolute;left:0;top:0;bottom:0;width:6px;z-index:2;background:var(--spacc,#8a3b2f);
     box-shadow:inset -1px 0 2px rgba(0,0,0,.4),inset 1px 0 0 rgba(255,255,255,.2)}
@@ -421,6 +424,10 @@
   .spine.solo .srow.bot{padding-left:27px}
   .srow.bot .disc{margin-left:auto}
   .audiobadge{flex:none;font-size:12px;line-height:1;margin-top:2px;filter:saturate(.85)}
+  .mangabadge{flex:none;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.08em;line-height:1;
+    margin-top:3px;padding:3px 5px;border-radius:3px;background:#a8342a;color:#fbe4e0;white-space:nowrap}
+  body[data-mode="night"] .mangabadge{background:#ff2bd6;color:#1a0414;box-shadow:0 0 6px rgba(255,43,214,.5)}
+  body[data-theme="pastel"] .mangabadge{background:#d64570;color:#fdeaf0}
   .rowbtn.del{position:absolute;top:5px;right:6px;z-index:4}
   .num{color:var(--sptext,#e6cf8f99)}
   .ttl{color:var(--spttl,#f0e6cd)}
@@ -480,6 +487,7 @@
   body[data-mode="night"] .spine .spsig i.on{background:var(--spinec,#2de7ff);box-shadow:0 0 4px var(--spinec,#2de7ff)}
   body[data-mode="night"] .spine.glitch{animation:spglitch 5s ease-in-out infinite}
   @keyframes spglitch{0%,96%,100%{transform:translateX(0)}97%{transform:translateX(-1px)}98%{transform:translateX(1px)}99%{transform:translateX(0)}}
+  body[data-mode="night"] .spine.manga{border:2px solid #ff2bd6; box-shadow:inset 0 0 20px rgba(0,0,0,.4), 0 0 10px -2px rgba(255,43,214,.6)}
   body[data-mode="night"] .seal{box-shadow:none}
   body[data-mode="night"] .bk.read .seal{box-shadow:0 0 8px var(--gold-hi,#8ff5ff)}
   body[data-mode="night"] .bk.reading .seal{animation:nightpulse 1.6s ease-in-out infinite;box-shadow:0 0 8px var(--ox,#ffb02e)}
@@ -518,6 +526,7 @@
   body[data-theme="pastel"] .rowbtn{color:#4a3a2299}
   body[data-theme="pastel"] .rowbtn.disc{color:#4a3a22cc}
   body[data-theme="pastel"] .rowbtn.del:hover{color:#8a3b2f}
+  body[data-theme="pastel"] .spine.manga{border:2px solid #d64570; box-shadow:0 0 0 1px rgba(214,69,112,.3)}
   body[data-theme="pastel"] .star{color:#00000022}
   body[data-theme="pastel"] .star.on{color:#8a6a1a}
   body[data-theme="pastel"] .upchip{color:#3a2b3a}
@@ -725,7 +734,7 @@
   </header>
 
   <div class="cabinet">
-    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v49</div>
+    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v50</div>
     <div class="hero" id="hero"></div>
 
     <input type="search" id="q" class="search" placeholder="Search title or author" aria-label="Search titles and authors">
@@ -754,6 +763,7 @@
           <div class="fmttoggle" id="nbFmt" role="group" aria-label="Format">
             <button type="button" data-fmt="book" aria-pressed="true">Book</button>
             <button type="button" data-fmt="audio" aria-pressed="false">Audiobook</button>
+            <button type="button" data-fmt="manga" aria-pressed="false">Manga</button>
           </div>
           <button class="go" id="nbGo">Add book</button>
         </div>
@@ -799,6 +809,7 @@
             <option value="all">Any</option>
             <option value="book">Books</option>
             <option value="audio">Audiobooks</option>
+            <option value="manga">Manga</option>
           </select>
           <span class="lbl">Rating</span>
           <select id="rfilter" aria-label="Filter by rating">
@@ -1237,6 +1248,7 @@ function decorateSpine(spine, s, b, id, standalone){
     spine.style.setProperty('--spshine', String(sh));
     const glitch=(hashStr(b.title+'wear')%100)<24;                     /* (#10) wear -> signal glitch */
     spine.classList.toggle('glitch', glitch);
+    spine.classList.toggle('manga', d.fmt==='manga');
     /* rating shown as signal-strength bars in the corner, clear of any text */
     const sig=document.createElement('span'); sig.className='spsig'; sig.setAttribute('aria-hidden','true');
     for(let i=1;i<=5;i++){ const bar=document.createElement('i'); if(i<=r) bar.className='on'; sig.appendChild(bar); }
@@ -1279,6 +1291,7 @@ function decorateSpine(spine, s, b, id, standalone){
   const worn=(hashStr(b.title+'wear')%100)<24;
   if(worn){ bg+=',radial-gradient(circle at 7% 15%,rgba(0,0,0,.20),transparent 22%),radial-gradient(circle at 95% 82%,rgba(0,0,0,.17),transparent 20%)'; fx.style.mixBlendMode='multiply'; }
   fx.style.background=bg; spine.appendChild(fx);
+  spine.classList.toggle('manga', d.fmt==='manga');
 }
 function buildSpine(s,b,idx,cards,secEntry,standalone){
   const id=idOf(s.series,b);
@@ -1293,8 +1306,10 @@ function buildSpine(s,b,idx,cards,secEntry,standalone){
   const seal=document.createElement('span'); seal.className='seal'; seal.setAttribute('aria-hidden','true');
   const num=document.createElement('span'); num.className='num'; num.textContent=b.num?b.num+'.':'';
   const ttl=document.createElement('span'); ttl.className='ttl'; ttl.textContent=b.title;
-  const isAudio=(details[id]&&details[id].fmt==='audio');
-  let badge=null; if(isAudio){ badge=document.createElement('span'); badge.className='audiobadge'; badge.textContent='\uD83C\uDFA7'; badge.title='Audiobook'; badge.setAttribute('aria-label','Audiobook'); }
+  const rowFmt=(details[id]&&details[id].fmt)||'book';
+  let badge=null;
+  if(rowFmt==='audio'){ badge=document.createElement('span'); badge.className='audiobadge'; badge.textContent='\uD83C\uDFA7'; badge.title='Audiobook'; badge.setAttribute('aria-label','Audiobook'); }
+  else if(rowFmt==='manga'){ badge=document.createElement('span'); badge.className='mangabadge'; badge.textContent='MANGA'; badge.title='Manga'; badge.setAttribute('aria-label','Manga'); }
 
   const stars=document.createElement('span'); stars.className='stars'; const starEls=[];
   stars.setAttribute('aria-hidden','true');
@@ -1478,12 +1493,13 @@ function buildDetail(s,b,id,standalone){
   ptot.onchange=()=>{ det(id).ptot=ptot.value?+ptot.value:undefined; sDet(); renderHero(); };
   const pages=document.createElement('div'); pages.style.cssText='display:flex;gap:6px;align-items:center';
   pages.append(pcur,Object.assign(document.createElement('span'),{textContent:'of',style:'font-family:var(--mono);font-size:11px;color:var(--dim)'}),ptot);
-  const isAudio=(d.fmt==='audio');
+  const curFmt=d.fmt||'book';
   const fmtWrap=document.createElement('div'); fmtWrap.className='fmttoggle';
-  const fBook=document.createElement('button'); fBook.type='button'; fBook.textContent='Book'; fBook.setAttribute('aria-pressed', String(!isAudio));
-  const fAudio=document.createElement('button'); fAudio.type='button'; fAudio.textContent='Audiobook'; fAudio.setAttribute('aria-pressed', String(isAudio));
-  fBook.onclick=()=>setFormat(id,'book'); fAudio.onclick=()=>setFormat(id,'audio');
-  fmtWrap.append(fBook,fAudio);
+  const fBook=document.createElement('button'); fBook.type='button'; fBook.textContent='Book'; fBook.setAttribute('aria-pressed', String(curFmt==='book'));
+  const fAudio=document.createElement('button'); fAudio.type='button'; fAudio.textContent='Audiobook'; fAudio.setAttribute('aria-pressed', String(curFmt==='audio'));
+  const fManga=document.createElement('button'); fManga.type='button'; fManga.textContent='Manga'; fManga.setAttribute('aria-pressed', String(curFmt==='manga'));
+  fBook.onclick=()=>setFormat(id,'book'); fAudio.onclick=()=>setFormat(id,'audio'); fManga.onclick=()=>setFormat(id,'manga');
+  fmtWrap.append(fBook,fAudio,fManga);
   /* status: a clear segmented control, plus re-read / up-next actions */
   const st=statusOf(id);
   const stWrap=document.createElement('div'); stWrap.className='stwrap';
@@ -1506,9 +1522,10 @@ function buildDetail(s,b,id,standalone){
   if(st==='reading'){
     const coverBtn=document.createElement('button'); coverBtn.type='button'; coverBtn.className='dact ghost';
     coverBtn.textContent = d.cover ? 'Remove cover' : 'Cover art';
-    coverBtn.title = d.cover ? 'Remove the cover pulled from your EPUB' : 'Pull a cover image from an EPUB file \u2014 shown while you\u2019re reading it';
-    const coverInput=document.createElement('input'); coverInput.type='file'; coverInput.accept='.epub,application/epub+zip'; coverInput.hidden=true;
-    coverInput.addEventListener('change',()=>{ const f=coverInput.files[0]; coverInput.value=''; if(f) attachCoverFromEpub(id,f); });
+    coverBtn.title = d.cover ? 'Remove the pulled cover image' : 'Pull a cover image from an EPUB or CBZ file \u2014 shown while you\u2019re reading it';
+    const coverInput=document.createElement('input'); coverInput.type='file';
+    coverInput.accept='.epub,.cbz,application/epub+zip,application/vnd.comicbook+zip'; coverInput.hidden=true;
+    coverInput.addEventListener('change',()=>{ const f=coverInput.files[0]; coverInput.value=''; if(f) attachCoverFromFile(id,f); });
     coverBtn.onclick=()=>{ if(d.cover){ delete d.cover; touch(id); sDet(); buildList(); render(); toast('Cover removed.'); } else { coverInput.click(); } };
     stActs.append(coverBtn,coverInput);
   }
@@ -1534,7 +1551,7 @@ function buildDetail(s,b,id,standalone){
     btn.style.setProperty('--sc',c); btn.title=c; btn.setAttribute('aria-label','Spine colour '+c);
     if(d.color===c) btn.classList.add('on');
     btn.onclick=()=>setColor(id,c); sw.appendChild(btn); });
-  grid.append(mk('Format',fmtWrap),mk('Started',started),mk('Finished',finished),mk((isAudio?'Chapter / of':'Page / of'),pages),mk('Status',stWrap,'wide'),mk('Your rating',rateWrap));
+  grid.append(mk('Format',fmtWrap),mk('Started',started),mk('Finished',finished),mk((curFmt==='audio'?'Chapter / of':'Page / of'),pages),mk('Status',stWrap,'wide'),mk('Your rating',rateWrap));
   const swf=mk('Spine colour',sw,'wide'); wrap.appendChild(swf);
   if(!standalone){ const mv=document.createElement('div'); mv.className='dmove';
     const up=document.createElement('button'); up.innerHTML='\u2191'; up.title='Move up'; up.setAttribute('aria-label','Move up'); up.onclick=()=>moveBook(s.series,b,-1);
@@ -1603,7 +1620,8 @@ function passes(id,hay){
   if(ratingFilter!=='all'&&ratingFilter!=='unrated'&&rt<+ratingFilter) return false;
   const d=details[id]||{};
   if(fmtFilter==='audio'&&d.fmt!=='audio') return false;
-  if(fmtFilter==='book'&&d.fmt==='audio') return false;
+  if(fmtFilter==='manga'&&d.fmt!=='manga') return false;
+  if(fmtFilter==='book'&&(d.fmt==='audio'||d.fmt==='manga')) return false;
   if(query){ const extra=d.notes?(' '+String(d.notes).toLowerCase()):'';
     if(!(hay+extra).includes(query)) return false; }
   return true;
@@ -1787,6 +1805,35 @@ async function extractEpubCover(file){
   const mime= ext==='png'?'image/png' : ext==='gif'?'image/gif' : ext==='webp'?'image/webp' : 'image/jpeg';
   return new Blob([imgData],{type:mime});
 }
+/* CBZ: no manifest to read, it's just a folder of page images zipped up. The cover is
+   whichever image sorts first \u2014 prefer one explicitly named "cover", else natural-sort
+   (numeric-aware) so "page2" doesn't sort after "page10" */
+function naturalCmp(a,b){
+  const ax=a.match(/\d+|\D+/g)||[], bx=b.match(/\d+|\D+/g)||[];
+  for(let i=0;i<Math.max(ax.length,bx.length);i++){
+    const as=ax[i]||'', bs=bx[i]||'';
+    const an=/^\d+$/.test(as), bn=/^\d+$/.test(bs);
+    if(an&&bn){ const d=(+as)-(+bs); if(d) return d; }
+    else if(as!==bs) return as<bs?-1:1;
+  }
+  return 0;
+}
+async function extractCbzCover(file){
+  const buf=await file.arrayBuffer();
+  const zip=await zipEntries(buf);
+  const IMG_RE=/\.(jpe?g|png|gif|webp)$/i;
+  const candidates=zip.entries.filter(e=>{
+    const base=e.name.split('/').pop();
+    return IMG_RE.test(e.name) && !e.name.includes('__MACOSX') && base && !base.startsWith('.');
+  });
+  if(!candidates.length) throw new Error('No images found inside this file.');
+  let coverEntry=candidates.find(e=>/cover/i.test(e.name));
+  if(!coverEntry) coverEntry=[...candidates].sort((a,b)=>naturalCmp(a.name,b.name))[0];
+  const imgData=await zip.extract(coverEntry);
+  const ext=coverEntry.name.split('.').pop().toLowerCase();
+  const mime= ext==='png'?'image/png' : ext==='gif'?'image/gif' : ext==='webp'?'image/webp' : 'image/jpeg';
+  return new Blob([imgData],{type:mime});
+}
 /* shrink to a small, sync-friendly jpeg \u2014 covers only ever live for as long as a book
    is actively being read, but keep them cheap regardless */
 async function resizeCoverToDataUrl(blob,maxW,maxH){
@@ -1799,10 +1846,14 @@ async function resizeCoverToDataUrl(blob,maxW,maxH){
     const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error('Could not read the image.'));
     reader.readAsDataURL(b); }, 'image/jpeg', 0.78); });
 }
-async function attachCoverFromEpub(id,file){
+async function attachCoverFromFile(id,file){
+  const name=(file.name||'').toLowerCase();
+  const isCbz = name.endsWith('.cbz') || file.type==='application/vnd.comicbook+zip';
+  const isEpub = name.endsWith('.epub') || file.type==='application/epub+zip';
+  if(!isCbz && !isEpub){ toast('Choose an .epub or .cbz file.'); return; }
   try{
-    toast('Reading cover from EPUB\u2026');
-    const blob=await extractEpubCover(file);
+    toast('Reading cover from '+(isCbz?'CBZ':'EPUB')+'\u2026');
+    const blob = isCbz ? await extractCbzCover(file) : await extractEpubCover(file);
     const dataUrl=await resizeCoverToDataUrl(blob,340,500);
     if(statusOf(id)!=='reading'){ toast('This book is no longer marked as reading \u2014 cover not saved.'); return; }
     det(id).cover=dataUrl; touch(id); sDet(); buildList(); render();
@@ -2065,6 +2116,7 @@ function exportMarkdown(){
       const bits=[];
       if(r) bits.push('\u2605'.repeat(r));
       if(d.fmt==='audio') bits.push('audiobook');
+      if(d.fmt==='manga') bits.push('manga');
       if(st==='reading') bits.push('reading');
       if(st==='dnf') bits.push('set aside');
       if(d.finished) bits.push('finished '+fmtDate(d.finished));
@@ -2083,7 +2135,7 @@ function exportCSV(){
   const rows=[['Series','Author','Number','Title','Format','Status','Rating','Started','Finished','Progress','Total','Times read','Notes']];
   catalog.series.forEach(s=>s.books.forEach(b=>{
     const id=b.id, d=details[id]||{};
-    rows.push([s.series,authorOf(s,b),b.num,b.title,(d.fmt==='audio'?'Audiobook':'Book'),
+    rows.push([s.series,authorOf(s,b),b.num,b.title,(d.fmt==='audio'?'Audiobook':d.fmt==='manga'?'Manga':'Book'),
       ST_LABEL[statusOf(id)]||'Unread', ratings[id]||'', d.started||'', d.finished||'',
       d.pcur||'', d.ptot||'', (d.reads?d.reads.length+1:(statusOf(id)==='read'?1:0)), d.notes||'']);
   }));
@@ -2285,13 +2337,13 @@ function addSeries(name,author){ name=name.trim(); author=author.trim();
   if(idx>=0) catalog.series.splice(idx,0,entry); else catalog.series.push(entry);
   touch(entry.sid); touch('__order');
   sCat(); buildList(); render(); toast('Added series \u201c'+name+'\u201d.'); }
-function setFormat(id,fmt){ const d=det(id); if(fmt==='audio') d.fmt='audio'; else delete d.fmt; touch(id); sDet(); buildList(); render(); }
+function setFormat(id,fmt){ const d=det(id); if(fmt==='audio'||fmt==='manga') d.fmt=fmt; else delete d.fmt; touch(id); sDet(); redecorate(id); buildList(); render(); }
 function addBook(sn,num,title,fmt,author){ title=title.trim(); num=num.trim(); author=(author||'').trim();
   if(!title){ toast('Give the book a title first.'); return; }
   const s=findSeries(sn); if(!s){ toast('Pick a series.'); return; }
   const entry={id:newId('b_'),num,title}; if(author) entry.author=author;
   insertByNumber(s.books,entry);
-  if(fmt==='audio'){ det(entry.id).fmt='audio'; sDet(); }
+  if(fmt==='audio'||fmt==='manga'){ det(entry.id).fmt=fmt; sDet(); }
   touch(entry.id); touch(s.sid);
   sCat(); buildList(); render(); toast('Added \u201c'+title+'\u201d.'); }
 function parseLine(raw){ let t=raw.trim(); if(!t) return null; t=t.replace(/^[-*\u2022]\s+/,'');
@@ -2541,7 +2593,7 @@ document.getElementById('btnCopy').onclick=()=>{
   catalog.series.forEach(s=>s.books.forEach(b=>{ const id=idOf(s.series,b); const st=statusOf(id); const d=details[id]||{};
     const unit=(d.fmt==='audio')?'ch ':'p ';
     const prog=(d.pcur||d.ptot)?(unit+(d.pcur||'')+'/'+(d.ptot||'')):'';
-    rows.push([s.series,authorOf(s,b),b.num,b.title,(d.fmt==='audio'?'Audiobook':'Book'),st[0].toUpperCase()+st.slice(1),ratings[id]||'',d.started||'',d.finished||'',prog,(d.notes||'').replace(/\s+/g,' ')].join('\t')); }));
+    rows.push([s.series,authorOf(s,b),b.num,b.title,(d.fmt==='audio'?'Audiobook':d.fmt==='manga'?'Manga':'Book'),st[0].toUpperCase()+st.slice(1),ratings[id]||'',d.started||'',d.finished||'',prog,(d.notes||'').replace(/\s+/g,' ')].join('\t')); }));
   const text=rows.join('\n'); const done=()=>toast('Copied. Paste into your sheet.');
   if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(text).then(done,()=>fbCopy(text,done)); else fbCopy(text,done); };
 function fbCopy(text,done){ const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
