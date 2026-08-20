@@ -734,7 +734,7 @@
   </header>
 
   <div class="cabinet">
-    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v50</div>
+    <div class="version" aria-hidden="true">The Reading Desk &nbsp;&middot;&nbsp; v51</div>
     <div class="hero" id="hero"></div>
 
     <input type="search" id="q" class="search" placeholder="Search title or author" aria-label="Search titles and authors">
@@ -1094,7 +1094,7 @@ function ensureStandalone(){ const s=catalog.series.find(s=>s.series==='Standalo
 }
 function findSeries(n){ return catalog.series.find(s=>s.series===n); }
 function paintStars(els,n){ els.forEach((el,i)=>el.classList.toggle('on',i<n)); }
-function hayFor(s,b){ return (s.series+' '+(authorOf(s,b)||'')+' '+b.title).toLowerCase(); }
+function hayFor(s,b){ return (s.series+' '+(authorOf(s,b)||'')+' '+displayTitle(b)).toLowerCase(); }
 /* effective author for a book: a standalone carries its own, a series book inherits the series' */
 function authorOf(s,b){ return (b&&b.author) ? b.author : (s?s.author:'') || ''; }
 
@@ -1110,11 +1110,11 @@ function readingList(){ const out=[]; catalog.series.forEach(s=>s.books.forEach(
 function buildHeroCard(sName,b){
   const id=idOf(sName,b); const d=det(id);
   const sObj=findSeries(sName); const num=b.num;
-  const art=document.createElement('section'); art.className='featured'; art.setAttribute('aria-label','Currently reading: '+b.title);
+  const art=document.createElement('section'); art.className='featured'; art.setAttribute('aria-label','Currently reading: '+displayTitle(b));
 
   const book=document.createElement('div'); book.className='book';
-  const _std=(sName==='Standalone'), _seed=seedOf(sName,b.title,_std), _auth=authorOf(sObj,b);
-  const _col=spineColor(sName,b.title,_std,id);
+  const _std=(sName==='Standalone'), _seed=seedOf(sName,displayTitle(b),_std), _auth=authorOf(sObj,b);
+  const _col=spineColor(sName,displayTitle(b),_std,id);
   const _light=det(id).color?(hexToHsl(det(id).color).l>58):(isLight(_seed)||isPastel());
   const _foil=foilFor(_seed), _acc=themed(accentFor(_auth,_seed)), _text=_light?'#2a2018':'#f0e6cd';
   book.style.setProperty('--bookc',_col);
@@ -1122,9 +1122,9 @@ function buildHeroCard(sName,b){
   book.style.setProperty('--bktext',_text); book.style.setProperty('--bkfoil',_foil); book.style.setProperty('--bkacc',_acc);
   book.style.setProperty('--bkttl', isFoilTitle(_seed)?(_light?themed('#7a5c14'):_foil):_text);
   /* procedural cover art (#17) */
-  const _hh=hashStr(b.title+'art'); let _art='';
-  const _cols=[_acc,_foil,themed(bookShade(_seed,b.title+'x'))];
-  for(let k=0;k<3;k++){ const hk=hashStr(b.title+'s'+k);
+  const _hh=hashStr(displayTitle(b)+'art'); let _art='';
+  const _cols=[_acc,_foil,themed(bookShade(_seed,displayTitle(b)+'x'))];
+  for(let k=0;k<3;k++){ const hk=hashStr(displayTitle(b)+'s'+k);
     const round=(hk%3===0), sz=44+hk%116, x=(hk>>>4)%100, y=(hk>>>9)%100, rot=(hk>>>2)%180, op=0.16+((hk>>>7)%22)/100;
     _art+='<span style="position:absolute;left:'+x+'%;top:'+y+'%;width:'+sz+'px;height:'+sz+'px;'+
       'transform:translate(-50%,-50%) rotate('+rot+'deg);background:'+_cols[k]+';opacity:'+op+';'+
@@ -1134,19 +1134,19 @@ function buildHeroCard(sName,b){
   book.style.setProperty('--bkcap', hasBand(_seed)?(bandIsFoil(_seed)?_foil:(_light?'rgba(0,0,0,.26)':'rgba(0,0,0,.4)')):'transparent');
   if(d.cover){
     book.classList.add('realcover');
-    book.innerHTML='<img class="bkphoto" src="'+d.cover+'" alt="Cover of '+b.title.replace(/"/g,'&quot;')+'">';
+    book.innerHTML='<img class="bkphoto" src="'+d.cover+'" alt="Cover of '+displayTitle(b).replace(/"/g,'&quot;')+'">';
   } else {
     book.innerHTML='<span class="bkart">'+_art+'</span><span class="bkend"></span>'+capHtml+
       '<span class="ribbon"></span><span class="bkorn">'+ornFor(_seed)+'</span>'+
       '<div class="frame"><div class="bt"></div><div class="ba"></div></div><div class="bseries"></div>';
-    book.querySelector('.bt').textContent=b.title;
+    book.querySelector('.bt').textContent=displayTitle(b);
     book.querySelector('.ba').textContent=_auth;
     book.querySelector('.bseries').textContent=sName+(num?' \u00b7 Book '+num:'');
   }
 
   const meta=document.createElement('div'); meta.className='fmeta';
   const k=document.createElement('div'); k.className='k'; k.textContent=sName+(num?' \u00b7 Book '+num:'');
-  const h=document.createElement('h2'); h.textContent=b.title;
+  const h=document.createElement('h2'); h.textContent=displayTitle(b);
   const au=document.createElement('div'); au.className='auth'; au.textContent=sObj?sObj.author:'';
   meta.append(k,h,au);
 
@@ -1186,7 +1186,7 @@ function buildHeroCard(sName,b){
   const notesBtn=document.createElement('button'); notesBtn.className='btn-ghost'; notesBtn.type='button';
   notesBtn.textContent = d.notes ? 'Notes \u2713' : 'Notes';
   notesBtn.title='Jot down thoughts, quotes, or where you left off';
-  notesBtn.onclick=()=>openNotesModal(id,b.title);
+  notesBtn.onclick=()=>openNotesModal(id,displayTitle(b));
   acts.append(fin,jump,notesBtn); meta.appendChild(acts);
 
   const flap=document.createElement('span'); flap.className='flap'; flap.textContent='Currently Reading';
@@ -1219,7 +1219,7 @@ function renderHero(){
 /* ---------------- BUILD SHELVES ---------------- */
 function decorateSpine(spine, s, b, id, standalone){
   spine.querySelectorAll(':scope > .spend,:scope > .sporn,:scope > .spfx,:scope > .spsig').forEach(x=>x.remove());
-  const seed=seedOf(s.series,b.title,standalone), d=details[id]||{};
+  const seed=seedOf(s.series,displayTitle(b),standalone), d=details[id]||{};
   const tot=+d.ptot||0;
   const orn=document.createElement('span'); orn.className='sporn';
   const end=document.createElement('span'); end.className='spend';
@@ -1227,7 +1227,7 @@ function decorateSpine(spine, s, b, id, standalone){
 
   if(isNight()){
     const override=d.color?themed(d.color):null;
-    const glow=override||themed(bookShade(seed,b.title));
+    const glow=override||themed(bookShade(seed,displayTitle(b)));
     const dim=isLight(seed);                              /* (#4) low-power vs high-energy signal */
     const acc=themed(accentFor(authorOf(s,b),seed));
     spine.style.setProperty('--spinec', glow);
@@ -1246,7 +1246,7 @@ function decorateSpine(spine, s, b, id, standalone){
     orn.textContent=ornFor(seed);
     const r=ratings[id]||0; const sh= r>=5?1:r>=4?0.6:r>=3?0.3:0;    /* (#19) rating -> scan-line intensity */
     spine.style.setProperty('--spshine', String(sh));
-    const glitch=(hashStr(b.title+'wear')%100)<24;                     /* (#10) wear -> signal glitch */
+    const glitch=(hashStr(displayTitle(b)+'wear')%100)<24;                     /* (#10) wear -> signal glitch */
     spine.classList.toggle('glitch', glitch);
     spine.classList.toggle('manga', d.fmt==='manga');
     /* rating shown as signal-strength bars in the corner, clear of any text */
@@ -1257,7 +1257,7 @@ function decorateSpine(spine, s, b, id, standalone){
   }
 
   const override=d.color?themed(d.color):null;
-  const col=override||themed(bookShade(seed,b.title));
+  const col=override||themed(bookShade(seed,displayTitle(b)));
   const light=override?(hexToHsl(override).l>58):isLight(seed);
   const text=textOn(seed);
   const foil=foilFor(seed);
@@ -1288,14 +1288,14 @@ function decorateSpine(spine, s, b, id, standalone){
   /* (#10 wear) + (#19 rating shimmer) overlay */
   const r=ratings[id]||0; const sh= r>=5?0.16 : r>=4?0.08 : 0;
   let bg='linear-gradient(115deg,transparent 42%,rgba(255,240,200,'+sh+') 50%,transparent 58%)';
-  const worn=(hashStr(b.title+'wear')%100)<24;
+  const worn=(hashStr(displayTitle(b)+'wear')%100)<24;
   if(worn){ bg+=',radial-gradient(circle at 7% 15%,rgba(0,0,0,.20),transparent 22%),radial-gradient(circle at 95% 82%,rgba(0,0,0,.17),transparent 20%)'; fx.style.mixBlendMode='multiply'; }
   fx.style.background=bg; spine.appendChild(fx);
   spine.classList.toggle('manga', d.fmt==='manga');
 }
 function buildSpine(s,b,idx,cards,secEntry,standalone){
   const id=idOf(s.series,b);
-  const label=(b.num?b.num+'. ':'')+b.title;
+  const label=(b.num?b.num+'. ':'')+displayTitle(b);
   const hay=hayFor(s,b);
 
   const bk=document.createElement('div'); bk.className='bk'; bk.dataset.id=id; bk.dataset.series=s.series;
@@ -1305,7 +1305,7 @@ function buildSpine(s,b,idx,cards,secEntry,standalone){
   const grip=document.createElement('span'); grip.className='grip'; grip.innerHTML='\u2807'; grip.title='Drag to reorder'; grip.setAttribute('aria-hidden','true');
   const seal=document.createElement('span'); seal.className='seal'; seal.setAttribute('aria-hidden','true');
   const num=document.createElement('span'); num.className='num'; num.textContent=b.num?b.num+'.':'';
-  const ttl=document.createElement('span'); ttl.className='ttl'; ttl.textContent=b.title;
+  const ttl=document.createElement('span'); ttl.className='ttl'; ttl.textContent=displayTitle(b);
   const rowFmt=(details[id]&&details[id].fmt)||'book';
   let badge=null;
   if(rowFmt==='audio'){ badge=document.createElement('span'); badge.className='audiobadge'; badge.textContent='\uD83C\uDFA7'; badge.title='Audiobook'; badge.setAttribute('aria-label','Audiobook'); }
@@ -1471,6 +1471,7 @@ function buildDetail(s,b,id,standalone){
   const ren=document.createElement('div'); ren.className='drow';
   const rn=document.createElement('input'); rn.className='num'; rn.value=b.num; rn.placeholder='#'; rn.setAttribute('aria-label','Book number');
   const rt=document.createElement('input'); rt.value=b.title; rt.setAttribute('aria-label','Book title');
+  if(d.fmt==='manga') rt.placeholder='Optional \u2014 defaults to "Vol. '+(b.num||'#')+'"';
   const ra=document.createElement('input'); ra.value=b.author||''; ra.placeholder='Author'; ra.setAttribute('aria-label','Author');
   const rb=document.createElement('button'); rb.className='dact'; rb.textContent='Save';
   rb.onclick=()=>renameBook(s.series,b, standalone? b.num : rn.value, rt.value, standalone? ra.value : undefined);
@@ -1543,7 +1544,7 @@ function buildDetail(s,b,id,standalone){
   const sw=document.createElement('div'); sw.className='swatches';
   const auto=document.createElement('button'); auto.type='button'; auto.className='sw auto';
   auto.title='Automatic colour'; auto.setAttribute('aria-label','Automatic colour');
-  auto.style.setProperty('--sc', spineColor(s.series,b.title,standalone));
+  auto.style.setProperty('--sc', spineColor(s.series,displayTitle(b),standalone));
   if(!d.color) auto.classList.add('on');
   auto.onclick=()=>setColor(id,'');
   sw.appendChild(auto);
@@ -1860,6 +1861,9 @@ async function attachCoverFromFile(id,file){
     toast('Cover added \u2713');
   }catch(err){ toast(err&&err.message ? err.message : 'Couldn\u2019t read a cover from that file.'); }
 }
+/* manga volumes rarely have a title distinct from "Series, Vol. N" \u2014 rather than make
+   people retype the series name every time, an empty title falls back to a volume label */
+function displayTitle(b){ return b.title || (b.num?('Vol. '+b.num):'Untitled'); }
 function bookById(id){ for(const s of catalog.series){ for(const b of s.books){ if(idOf(s.series,b)===id) return {s,b}; } } return null; }
 /* re-run decorateSpine on just one book's row, so rating/page edits update the
    card's visuals (stars, signal bars, thickness, patina) without a full rebuild */
@@ -1909,7 +1913,7 @@ function openFinishModal(id){
   const back=document.createElement('div'); back.className='modal-backdrop';
   const m=document.createElement('div'); m.className='modal'; m.setAttribute('role','dialog'); m.setAttribute('aria-modal','true');
   const h=document.createElement('h3'); h.textContent='Finished'; 
-  const sub=document.createElement('div'); sub.className='sub'; sub.textContent=b.title+(s.series!=='Standalone'?' \u2014 '+s.series:'');
+  const sub=document.createElement('div'); sub.className='sub'; sub.textContent=displayTitle(b)+(s.series!=='Standalone'?' \u2014 '+s.series:'');
   m.append(h,sub);
 
   const mk=(labelTxt,el)=>{ const r=document.createElement('div'); r.className='mrow'; const l=document.createElement('label'); l.textContent=labelTxt; r.append(l,el); return r; };
@@ -1954,9 +1958,9 @@ function renderUpNext(){
   const l=document.createElement('span'); l.className='uplbl'; l.textContent='Up next'; wrap.appendChild(l);
   q.slice(0,6).forEach(({s,b})=>{
     const chip=document.createElement('button'); chip.className='upchip';
-    chip.style.setProperty('--spinec', spineColor(s,b.title,s==='Standalone',b.id));
-    chip.textContent=(b.num?b.num+'. ':'')+b.title;
-    chip.title='Go to '+b.title;
+    chip.style.setProperty('--spinec', spineColor(s,displayTitle(b),s==='Standalone',b.id));
+    chip.textContent=(b.num?b.num+'. ':'')+displayTitle(b);
+    chip.title='Go to '+displayTitle(b);
     chip.onclick=()=>jumpTo(b.id);
     wrap.appendChild(chip);
   });
@@ -2112,7 +2116,7 @@ function exportMarkdown(){
     s.books.forEach(b=>{
       const id=b.id, st=statusOf(id), d=details[id]||{}, r=ratings[id]||0;
       const box=st==='read'?'x':' ';
-      let line='- ['+box+'] '+(b.num?b.num+'. ':'')+b.title;
+      let line='- ['+box+'] '+(b.num?b.num+'. ':'')+displayTitle(b);
       const bits=[];
       if(r) bits.push('\u2605'.repeat(r));
       if(d.fmt==='audio') bits.push('audiobook');
@@ -2135,7 +2139,7 @@ function exportCSV(){
   const rows=[['Series','Author','Number','Title','Format','Status','Rating','Started','Finished','Progress','Total','Times read','Notes']];
   catalog.series.forEach(s=>s.books.forEach(b=>{
     const id=b.id, d=details[id]||{};
-    rows.push([s.series,authorOf(s,b),b.num,b.title,(d.fmt==='audio'?'Audiobook':d.fmt==='manga'?'Manga':'Book'),
+    rows.push([s.series,authorOf(s,b),b.num,displayTitle(b),(d.fmt==='audio'?'Audiobook':d.fmt==='manga'?'Manga':'Book'),
       ST_LABEL[statusOf(id)]||'Unread', ratings[id]||'', d.started||'', d.finished||'',
       d.pcur||'', d.ptot||'', (d.reads?d.reads.length+1:(statusOf(id)==='read'?1:0)), d.notes||'']);
   }));
@@ -2339,13 +2343,14 @@ function addSeries(name,author){ name=name.trim(); author=author.trim();
   sCat(); buildList(); render(); toast('Added series \u201c'+name+'\u201d.'); }
 function setFormat(id,fmt){ const d=det(id); if(fmt==='audio'||fmt==='manga') d.fmt=fmt; else delete d.fmt; touch(id); sDet(); redecorate(id); buildList(); render(); }
 function addBook(sn,num,title,fmt,author){ title=title.trim(); num=num.trim(); author=(author||'').trim();
-  if(!title){ toast('Give the book a title first.'); return; }
+  if(!title && fmt!=='manga'){ toast('Give the book a title first.'); return; }
+  if(!title && !num){ toast('Manga needs at least a volume number if there\u2019s no title.'); return; }
   const s=findSeries(sn); if(!s){ toast('Pick a series.'); return; }
   const entry={id:newId('b_'),num,title}; if(author) entry.author=author;
   insertByNumber(s.books,entry);
   if(fmt==='audio'||fmt==='manga'){ det(entry.id).fmt=fmt; sDet(); }
   touch(entry.id); touch(s.sid);
-  sCat(); buildList(); render(); toast('Added \u201c'+title+'\u201d.'); }
+  sCat(); buildList(); render(); toast('Added \u201c'+displayTitle(entry)+'\u201d.'); }
 function parseLine(raw){ let t=raw.trim(); if(!t) return null; t=t.replace(/^[-*\u2022]\s+/,'');
   const m=t.match(/^(\d+(?:\.\d+)?)[.)]?\s+(.+)$/); if(m) return {num:m[1],title:m[2].trim()}; return {num:'',title:t}; }
 function addList(sn,text){ const s=findSeries(sn); if(!s){ toast('Pick a series to paste into.'); return; }
@@ -2358,7 +2363,9 @@ function addList(sn,text){ const s=findSeries(sn); if(!s){ toast('Pick a series 
   sCat(); buildList(); render(); toast('Added '+added+' book'+(added>1?'s':'')+' to '+sn+(skipped?' ('+skipped+' skipped)':'')+'.'); }
 
 function renameBook(sn,b,num,title,author){ title=title.trim(); num=num.trim();
-  if(!title){ toast('A book needs a title.'); return; }
+  const isManga=(details[b.id]&&details[b.id].fmt==='manga');
+  if(!title && !isManga){ toast('A book needs a title.'); return; }
+  if(!title && !num){ toast('Manga needs at least a volume number if there\u2019s no title.'); return; }
   b.num=num; b.title=title;
   if(author!==undefined){ author=author.trim(); if(author) b.author=author; else delete b.author; }
   touch(b.id);
@@ -2393,7 +2400,7 @@ function removeBook(sn,b){ const s=findSeries(sn); if(!s) return; const i=s.book
   const id=b.id; const snap={st:status[id],rt:ratings[id],dt:details[id]};
   s.books.splice(i,1); delete status[id]; delete ratings[id]; delete details[id]; openDetails.delete(id);
   tomb(id); touch(s.sid); sCat(); sSt(); sRt(); sDet(); buildList(); render();
-  undo={type:'book',sn,book:b,index:i,snap}; toast('Removed \u201c'+b.title+'\u201d.','Undo',doUndo); }
+  undo={type:'book',sn,book:b,index:i,snap}; toast('Removed \u201c'+displayTitle(b)+'\u201d.','Undo',doUndo); }
 function removeSeries(name){ const i=catalog.series.findIndex(s=>s.series===name); if(i<0) return; const s=catalog.series[i];
   const ss={},rr={},dd={};
   s.books.forEach(b=>{ const id=b.id; if(status[id]){ss[id]=status[id];delete status[id];}
@@ -2489,7 +2496,7 @@ function jumpTo(id){
 function surprise(){ const pool=[]; catalog.series.forEach(s=>s.books.forEach(b=>{ if(statusOf(idOf(s.series,b))==='unread') pool.push({s:s.series,b}); }));
   if(!pool.length){ toast('You have read everything on the list.'); return; }
   const p=pool[Math.floor(Math.random()*pool.length)]; filter='all'; ratingFilter='all'; syncFilters();
-  jumpTo(idOf(p.s,p.b)); toast('Try: '+(p.b.num?p.b.num+'. ':'')+p.b.title+' \u2014 '+p.s); }
+  jumpTo(idOf(p.s,p.b)); toast('Try: '+(p.b.num?p.b.num+'. ':'')+displayTitle(p.b)+' \u2014 '+p.s); }
 
 /* ---------------- CONTROLS ---------------- */
 function updateTabCounts(){ let se=0,si=0;
@@ -2574,7 +2581,8 @@ const ctrl=document.getElementById('ctrl');
 document.getElementById('ctrlHead').onclick=()=>{ const open=ctrl.classList.toggle('open');
   document.getElementById('ctrlHead').setAttribute('aria-expanded', String(open)); };
 document.querySelectorAll('#nbFmt button').forEach(b=>{ b.onclick=()=>{ addFmt=b.dataset.fmt;
-  document.querySelectorAll('#nbFmt button').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.fmt===addFmt))); }; });
+  document.querySelectorAll('#nbFmt button').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.fmt===addFmt)));
+  nbTitle.placeholder = addFmt==='manga' ? 'Optional \u2014 defaults to "Vol. #"' : 'Title'; }; });
 document.getElementById('nbGo').onclick=()=>{ addBook(nbSeries.value,nbNum.value,nbTitle.value,addFmt,document.getElementById('nbAuthor').value); nbNum.value=''; nbTitle.value=''; document.getElementById('nbAuthor').value=''; };
 document.getElementById('npGo').onclick=()=>{ addList(npSeries.value,npText.value); npText.value=''; };
 ['nsName','nsAuthor'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('nsGo').click();}));
@@ -2593,15 +2601,15 @@ document.getElementById('btnCopy').onclick=()=>{
   catalog.series.forEach(s=>s.books.forEach(b=>{ const id=idOf(s.series,b); const st=statusOf(id); const d=details[id]||{};
     const unit=(d.fmt==='audio')?'ch ':'p ';
     const prog=(d.pcur||d.ptot)?(unit+(d.pcur||'')+'/'+(d.ptot||'')):'';
-    rows.push([s.series,authorOf(s,b),b.num,b.title,(d.fmt==='audio'?'Audiobook':d.fmt==='manga'?'Manga':'Book'),st[0].toUpperCase()+st.slice(1),ratings[id]||'',d.started||'',d.finished||'',prog,(d.notes||'').replace(/\s+/g,' ')].join('\t')); }));
+    rows.push([s.series,authorOf(s,b),b.num,displayTitle(b),(d.fmt==='audio'?'Audiobook':d.fmt==='manga'?'Manga':'Book'),st[0].toUpperCase()+st.slice(1),ratings[id]||'',d.started||'',d.finished||'',prog,(d.notes||'').replace(/\s+/g,' ')].join('\t')); }));
   const text=rows.join('\n'); const done=()=>toast('Copied. Paste into your sheet.');
   if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(text).then(done,()=>fbCopy(text,done)); else fbCopy(text,done); };
 function fbCopy(text,done){ const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
   try{ document.execCommand('copy'); done(); }catch(e){ toast('Copy blocked. Use Save backup instead.'); } ta.remove(); }
 document.getElementById('btnTxt').onclick=()=>{ const out=['My Reading List','','Book Series',''];
   catalog.series.filter(s=>s.series!=='Standalone').forEach(s=>{ out.push(s.author?s.series+' - '+s.author:s.series);
-    s.books.forEach(b=>out.push('\t'+(b.num?b.num+'. ':'')+b.title)); out.push(''); });
-  const sa=findSeries('Standalone'); if(sa&&sa.books.length){ out.push('Stand Alone Books'); sa.books.forEach(b=>out.push(b.title+(b.author?' - '+b.author:''))); }
+    s.books.forEach(b=>out.push('\t'+(b.num?b.num+'. ':'')+displayTitle(b))); out.push(''); });
+  const sa=findSeries('Standalone'); if(sa&&sa.books.length){ out.push('Stand Alone Books'); sa.books.forEach(b=>out.push(displayTitle(b)+(b.author?' - '+b.author:''))); }
   download('MyReadingList.txt',out.join('\n'),'text/plain'); toast('List exported as .txt.'); };
 document.getElementById('btnSave').onclick=()=>{ download('reading-list-backup.json',JSON.stringify({version:5,catalog,status,ratings,details,meta},null,1),'application/json'); noteBackup(); toast('Backup saved.'); };
 document.getElementById('btnLoad').onclick=()=>document.getElementById('file').click();
