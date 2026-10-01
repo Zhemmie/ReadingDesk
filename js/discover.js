@@ -214,23 +214,43 @@ async function wikidataFindEntity(label){
   const hits=json && Array.isArray(json.search) ? json.search : [];
   return hits.length ? hits[0].id : '';
 }
+async function wikidataFindEntities(label,limit){
+  const url='https://www.wikidata.org/w/api.php?action=wbsearchentities&search='+encodeURIComponent(label)+'&language=en&format=json&origin=*&type=item&limit='+(limit||5);
+  const json=await fetchJson(url);
+  const hits=json && Array.isArray(json.search) ? json.search : [];
+  return hits.map(h=>h.id);
+}
 async function wikidataSparql(query){
   const url='https://query.wikidata.org/sparql?format=json&query='+encodeURIComponent(query);
   const json=await fetchJson(url);
   return json && json.results && Array.isArray(json.results.bindings) ? json.results.bindings : [];
 }
 // returns {series,num} for one book (num may be '' even when series isn't —
-// not every series claim on Wikidata carries an ordinal), or {series:'',num:''}
-export async function wikidataSeriesFor(title){
-  const id=await wikidataFindEntity(title);
-  if(!id) return {series:'',num:''};
+// not every series claim on Wikidata carries an ordinal), or {series:'',num:''}.
+// A plain title search on Wikidata is often ambiguous — "Black Sun" alone
+// matches the astronomical phenomenon, a film, a band, and more, with no
+// guarantee the actual novel is even the top hit — so this checks the top
+// several label matches in one query rather than trusting the first one,
+// and when an author is known, prefers whichever candidate's author (P50)
+// actually matches instead of blindly taking the first series claim found.
+export async function wikidataSeriesFor(title,author){
+  const ids=await wikidataFindEntities(title,10);
+  if(!ids.length) return {series:'',num:''};
+  const values=ids.map(id=>'wd:'+id).join(' ');
   const bindings=await wikidataSparql(
-    `SELECT ?seriesLabel ?ordinal WHERE { wd:${id} p:P179 ?stmt. ?stmt ps:P179 ?series. `+
-    `OPTIONAL { ?stmt pq:P1545 ?ordinal. } SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 1`
+    `SELECT ?item ?seriesLabel ?ordinal ?authorLabel WHERE { VALUES ?item { ${values} } `+
+    `?item p:P179 ?stmt. ?stmt ps:P179 ?series. `+
+    `OPTIONAL { ?stmt pq:P1545 ?ordinal. } OPTIONAL { ?item wdt:P50 ?author. } `+
+    `SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 10`
   );
-  const b=bindings[0];
-  if(!b) return {series:'',num:''};
-  return {series: b.seriesLabel ? b.seriesLabel.value : '', num: b.ordinal ? b.ordinal.value : ''};
+  if(!bindings.length) return {series:'',num:''};
+  let best=bindings[0];
+  if(author){
+    const wanted=author.toLowerCase();
+    const match=bindings.find(b=>b.authorLabel && b.authorLabel.value.toLowerCase().includes(wanted));
+    if(match) best=match;
+  }
+  return {series: best.seriesLabel ? best.seriesLabel.value : '', num: best.ordinal ? best.ordinal.value : ''};
 }
 // returns every book Wikidata has tagged as part of the given series, as
 // {title,num,author}, sorted by number — a supplement to merge alongside

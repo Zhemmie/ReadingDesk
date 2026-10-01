@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v72';
+const APP_VERSION='v73';
 
 S.load();
 
@@ -547,7 +547,7 @@ function ensurePreviewInfo(title,author){
   Promise.allSettled([
     Discover.openLibrarySynopsis(title,author),
     Discover.openLibrarySubjects(title,author),
-    needsSeries ? Discover.wikidataSeriesFor(title) : Promise.resolve(null)
+    needsSeries ? Discover.wikidataSeriesFor(title,author) : Promise.resolve(null)
   ]).then(([synRes,genRes,serRes])=>{
     discoverPreviewCache.set(key,{
       status:'ok',
