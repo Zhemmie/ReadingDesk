@@ -250,6 +250,11 @@ export function clearCover(id){ const d=details[id]; if(d && d.cover){ delete d.
 export function genresFor(id){ return (details[id] && details[id].genres) || null; }
 export function setGenres(id,arr){ det(id).genres=arr; touch(id); sDet(); }
 
+// ---------- synopsis (fetched on-demand from Open Library, cached per book) ----------
+// null = never fetched; '' = fetched, nothing found; non-empty string = the synopsis
+export function synopsisFor(id){ const d=details[id]; return (d && d.synopsis!=null) ? d.synopsis : null; }
+export function setSynopsis(id,text){ det(id).synopsis=(text||''); touch(id); sDet(); }
+
 // ---------- TasteDive discovery key + CORS-proxy URL (local only, not synced — like a device setting) ----------
 // TasteDive's API sends no Access-Control-Allow-Origin header, so it can't be
 // called directly from page JS (works fine pasted into the address bar,

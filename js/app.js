@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v62';
+const APP_VERSION='v63';
 
 S.load();
 
@@ -231,7 +231,7 @@ function renderView(){
   const root=document.getElementById('view');
   if(currentView==='dashboard') root.innerHTML=renderDashboard();
   else if(currentView==='library') root.innerHTML=renderLibrary();
-  else if(currentView==='discover') root.innerHTML=renderDiscoverPage();
+  else if(currentView==='discover'){ root.innerHTML=renderDiscoverPage(); wireDiscoverCombo(); }
   else if(currentView==='stats') root.innerHTML=renderStats();
   else if(currentView==='settings') root.innerHTML=renderSettings();
 }
@@ -325,7 +325,7 @@ function discoverSectionHtml(){
       <button class="btn ghost sm" data-act="discover-retry" data-seed="${esc(cacheKey)}" style="margin-top:8px">Retry</button></div>`;
   else if(!entry.items.length) body=`<div class="empty-row">No new suggestions from <i>${esc(seedTitle)}</i> right now.</div>`;
   else body=`<div class="hscroll">${entry.items.map(it=>`
-      <article class="chipcard discover-card">
+      <article class="chipcard discover-card" data-act="discover-preview" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" role="button" tabindex="0">
         <div class="chipcard-title">${esc(it.title)}</div>
         <div class="chipcard-reason">${it.series?esc(it.series+(it.num?' #'+it.num:'')):'Similar to '+esc(seedTitle)}</div>
         <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}">+ Add</button>
@@ -346,16 +346,62 @@ function runDiscoverSeedSearch(v){
   discoverPageSeedTitle=val;
   if(currentView==='discover') refreshView();
 }
+// library titles grouped for the Discovery page's seed picker: singles
+// first, then each series (alphabetical), filtered live as you type —
+// the seed input itself doubles as the panel's search bar
+function discoverComboGroups(filterText){
+  const f=(filterText||'').trim().toLowerCase();
+  const matches=b=>!f || S.displayTitle(b).toLowerCase().includes(f);
+  const singles=S.findSeries('Standalone');
+  const singleBooks=(singles?singles.books:[]).filter(matches).slice().sort((a,b)=>S.displayTitle(a).localeCompare(S.displayTitle(b)));
+  const seriesList=S.catalog.series.filter(s=>s.series!=='Standalone').slice().sort((a,b)=>a.series.localeCompare(b.series));
+  const seriesGroups=seriesList.map(s=>({name:s.series,books:s.books.filter(matches)})).filter(g=>g.books.length);
+  return {singleBooks,seriesGroups};
+}
+function discoverComboListHtml(filterText){
+  const {singleBooks,seriesGroups}=discoverComboGroups(filterText);
+  if(!singleBooks.length && !seriesGroups.length) return '<div class="combo-empty">No library matches &mdash; press Find to search this title anyway.</div>';
+  let html='';
+  if(singleBooks.length) html+='<div class="combo-group"><div class="combo-group-label">Singles</div>'+
+    singleBooks.map(b=>`<button type="button" class="combo-item" data-act="combo-pick" data-title="${esc(S.displayTitle(b))}">${esc(S.displayTitle(b))}</button>`).join('')+'</div>';
+  seriesGroups.forEach(g=>{ html+=`<div class="combo-group"><div class="combo-group-label">${esc(g.name)}</div>`+
+    g.books.map(b=>`<button type="button" class="combo-item" data-act="combo-pick" data-title="${esc(S.displayTitle(b))}">${esc(S.displayTitle(b))}</button>`).join('')+'</div>'; });
+  return html;
+}
+// wired by hand (not the usual delegated re-render) so typing in the seed
+// input never loses focus/cursor position — only the panel's own innerHTML
+// is touched on each keystroke; selecting a result still goes through the
+// normal refreshView() path since that's a discrete action, not typing
+function wireDiscoverCombo(){
+  const input=document.getElementById('discoverSeedInput');
+  const panel=document.getElementById('discoverCombo');
+  if(!input || !panel) return;
+  const close=()=>{ panel.hidden=true; };
+  // focusing shows the full browsable list regardless of any prefilled value
+  // (and selects it, so the first keystroke starts a fresh filter) — typing
+  // after that narrows live via the 'input' listener
+  input.addEventListener('focus',()=>{ panel.innerHTML=discoverComboListHtml(''); panel.hidden=false; input.select(); });
+  input.addEventListener('input',()=>{ panel.innerHTML=discoverComboListHtml(input.value); panel.hidden=false; });
+  input.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+  input.addEventListener('blur',()=>{ setTimeout(close,150); });
+  panel.addEventListener('mousedown',e=>{
+    const b=e.target.closest('[data-act="combo-pick"]'); if(!b) return;
+    e.preventDefault();
+    close();
+    runDiscoverSeedSearch(b.dataset.title);
+  });
+}
 function renderDiscoverPage(){
   const key=S.getTasteDiveKey(), proxy=S.getTasteDiveProxy();
   const autoSeed=discoverSeedBook();
   const seedTitle = discoverPageSeedTitle || (autoSeed ? S.displayTitle(autoSeed.b) : '');
-  const allTitles=S.allBooks().map(x=>S.displayTitle(x.b)).sort((a,b)=>a.localeCompare(b));
-  const datalist=`<datalist id="discoverTitleList">${allTitles.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>`;
   const seekbar=`<div class="seekrow">
-      <input id="discoverSeedInput" list="discoverTitleList" value="${esc(seedTitle)}" placeholder="e.g. The Hobbit" autocomplete="off">
+      <div class="combofield">
+        <input id="discoverSeedInput" value="${esc(seedTitle)}" placeholder="e.g. The Hobbit — or type any title" autocomplete="off">
+        <div class="combo-panel" id="discoverCombo" hidden></div>
+      </div>
       <button class="btn primary" data-act="discoverpage-find">Find</button>
-    </div>${datalist}`;
+    </div>`;
 
   if(!key || !proxy){
     return `<div class="dash">
@@ -379,7 +425,7 @@ function renderDiscoverPage(){
         <button class="btn ghost sm" data-act="discover-retry" data-seed="${esc(cacheKey)}" style="margin-top:8px">Retry</button></div>`;
     else if(!entry.items.length) body=`<div class="empty-row">No new suggestions from <i>${esc(seedTitle)}</i> right now.</div>`;
     else body=`<div class="discover-grid">${entry.items.map(it=>`
-        <article class="chipcard discover-card">
+        <article class="chipcard discover-card" data-act="discover-preview" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" role="button" tabindex="0">
           <div class="chipcard-title">${esc(it.title)}</div>
           <div class="chipcard-reason">${it.series?esc(it.series+(it.num?' #'+it.num:'')):'Similar to '+esc(seedTitle)}</div>
           <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}">+ Add</button>
@@ -394,6 +440,61 @@ function renderDiscoverPage(){
       ${body}
     </section>
   </div>`;
+}
+
+// ---------- discovered-book preview modal (not in the library yet) ----------
+// an ephemeral, session-only cache — these aren't your books, so there's
+// nowhere in store.js to persist them; re-opened previews just re-fetch
+const discoverPreviewCache=new Map();
+let previewCtx=null;
+function discoverPreviewHtml(title,series,num){
+  const key=(title||'').toLowerCase();
+  const entry=discoverPreviewCache.get(key);
+  let body;
+  if(!entry || entry.status==='loading') body='<div class="empty-row">Looking up a synopsis…</div>';
+  else if(entry.status==='error') body=`<p class="sub" style="margin:0">${esc(entry.error)}</p>`;
+  else if(entry.status==='ok' && entry.text) body=`<p class="sub" style="margin:0;white-space:pre-wrap">${esc(entry.text)}</p>`;
+  else body='<p class="sub" style="margin:0">No synopsis found for this one on Open Library.</p>';
+  return `<h3>${esc(title)}</h3>
+    ${series?`<div class="detail-sub">${esc(series+(num?' #'+num:''))}</div>`:''}
+    <div class="detail-section" style="margin-top:16px"><h4>Synopsis</h4>${body}</div>
+    <div class="btnrow" style="margin-top:16px">
+      <button class="btn ghost" data-act="close">Close</button>
+      <button class="btn primary" data-act="preview-add" data-title="${esc(title)}" data-series="${esc(series)}" data-num="${esc(num)}">+ Add to library</button>
+    </div>`;
+}
+function ensurePreviewSynopsis(title){
+  const key=(title||'').toLowerCase();
+  if(discoverPreviewCache.has(key)) return;
+  discoverPreviewCache.set(key,{status:'loading'});
+  Discover.openLibrarySynopsis(title).then(text=>{
+    discoverPreviewCache.set(key,{status:'ok',text});
+    if(previewCtx && previewCtx.title===title) rerenderPreview();
+  }).catch(err=>{
+    discoverPreviewCache.set(key,{status:'error',error:(err&&err.message)||'Could not fetch a synopsis.'});
+    if(previewCtx && previewCtx.title===title) rerenderPreview();
+  });
+}
+function rerenderPreview(){
+  if(!modalCtx || !previewCtx) return;
+  modalCtx.m.querySelector('.modal-body').innerHTML=discoverPreviewHtml(previewCtx.title,previewCtx.series,previewCtx.num);
+}
+function openDiscoverPreview(title,series,num){
+  previewCtx={title,series,num};
+  showModal(discoverPreviewHtml(title,series,num),{
+    onAction:(t)=>{
+      if(t.dataset.act==='close'){ closeModal(); return; }
+      if(t.dataset.act==='preview-add'){
+        const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,status:'unread'});
+        if(entry){
+          discoverCache.forEach(c=>{ if(c.status==='ok') c.items=c.items.filter(it=>it.title!==t.dataset.title); });
+          toast('Added “'+S.displayTitle(entry)+'” ✓');
+          closeModal(); refreshView();
+        }
+      }
+    }
+  });
+  ensurePreviewSynopsis(title);
 }
 
 function renderDashboard(){
@@ -834,6 +935,15 @@ function detailHtml(id){
     </div>
 
     <div class="detail-section">
+      <section class="collapse" data-open="${synopsisOpen.has(id)}">
+        <button type="button" class="collapse-head" data-act="synopsis-toggle" data-id="${id}">
+          <span>Synopsis</span><span class="series-caret" aria-hidden="true">&#8250;</span>
+        </button>
+        <div class="collapse-body">${synopsisHtml(id)}</div>
+      </section>
+    </div>
+
+    <div class="detail-section">
       <h4>Reminders</h4>
       ${remindersHtml}
       <form data-act="reminder-save" data-id="${id}" class="field" style="margin-top:8px">
@@ -881,6 +991,12 @@ function openDetail(id){
       else if(act==='cover-clear'){ S.clearCover(bid); rerenderDetail(bid); toast('Cover removed.'); }
       else if(act==='cover-pull'){ pullCoverFromFile(bid); }
       else if(act==='genres-fetch'||act==='genres-refetch'){ fetchGenres(bid); }
+      else if(act==='synopsis-fetch'||act==='synopsis-refetch'){ fetchSynopsis(bid); }
+      else if(act==='synopsis-toggle'){
+        if(synopsisOpen.has(bid)) synopsisOpen.delete(bid);
+        else { synopsisOpen.add(bid); if(S.synopsisFor(bid)==null) fetchSynopsis(bid); }
+        rerenderDetail(bid);
+      }
       else if(act==='discover-open'){
         const found=S.bookById(bid); if(!found) return;
         discoverPageSeedTitle=S.displayTitle(found.b);
@@ -955,6 +1071,33 @@ function fetchGenres(id){
     genresLoading.delete(id); S.setGenres(id,arr); rerenderDetail(id);
   }).catch(err=>{
     genresLoading.delete(id); toast((err&&err.message)||'Could not fetch genres.'); rerenderDetail(id);
+  });
+}
+
+// the Synopsis section's open/closed state is session-only UI state, same as
+// openSeries for the Library accordion — opening it for the first time
+// auto-fetches, matching the "collapsible" ask without a separate button
+const synopsisLoading=new Set();
+const synopsisOpen=new Set();
+function synopsisHtml(id){
+  if(synopsisLoading.has(id)) return '<div class="empty-row">Looking up a synopsis…</div>';
+  const text=S.synopsisFor(id);
+  if(text) return `<p class="sub" style="margin:0 0 8px;white-space:pre-wrap">${esc(text)}</p>`
+    +`<button class="btn ghost sm" data-act="synopsis-refetch" data-id="${id}">Refresh</button>`;
+  if(text===''){
+    return '<p class="sub" style="margin:0 0 8px">No synopsis found for this one on Open Library.</p>'
+      +`<button class="btn ghost sm" data-act="synopsis-fetch" data-id="${id}">Try again</button>`;
+  }
+  return `<button class="btn ghost sm" data-act="synopsis-fetch" data-id="${id}">Fetch synopsis</button>`;
+}
+function fetchSynopsis(id){
+  const found=S.bookById(id); if(!found) return;
+  const {s,b}=found;
+  synopsisLoading.add(id); rerenderDetail(id);
+  Discover.openLibrarySynopsis(S.displayTitle(b),S.authorOf(s,b)).then(text=>{
+    synopsisLoading.delete(id); S.setSynopsis(id,text||''); rerenderDetail(id);
+  }).catch(err=>{
+    synopsisLoading.delete(id); toast((err&&err.message)||'Could not fetch a synopsis.'); rerenderDetail(id);
   });
 }
 
@@ -1129,6 +1272,7 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='open-discover') setView('discover');
   else if(act==='discoverpage-find'){ const inp=document.getElementById('discoverSeedInput'); runDiscoverSeedSearch(inp&&inp.value); }
   else if(act==='discover-retry'){ discoverCache.delete(t.dataset.seed); refreshView(); }
+  else if(act==='discover-preview'){ openDiscoverPreview(t.dataset.title,t.dataset.series,t.dataset.num); }
   else if(act==='discover-add'){
     const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,status:'unread'});
     if(entry){

@@ -60,6 +60,33 @@ export async function tasteDiveSimilar(seedTitle,key,limit,proxyUrl){
   return results.map(r=>cleanTitle(r.name)).filter(r=>r.title);
 }
 
+// returns a synopsis string (possibly '' if nothing was found). Open Library's
+// search results don't carry the full description, only a work "key" — so
+// this is two requests: find the work, then fetch its full record. Falls
+// back to the work's first_sentence if it has no description at all.
+export async function openLibrarySynopsis(title,author){
+  const params=new URLSearchParams({title:title||'', fields:'key,first_sentence', limit:'1'});
+  if(author) params.set('author',author);
+  const url='https://openlibrary.org/search.json?'+params.toString();
+  const json=await fetchJson(url);
+  const doc=json && Array.isArray(json.docs) ? json.docs[0] : null;
+  if(!doc) return '';
+  let text='';
+  if(doc.key){
+    try{
+      const work=await fetchJson('https://openlibrary.org'+doc.key+'.json');
+      let desc=work && work.description;
+      if(desc && typeof desc==='object') desc=desc.value;
+      if(desc) text=String(desc).trim();
+    }catch(e){ /* no work record — fall back to first_sentence below */ }
+  }
+  if(!text && doc.first_sentence){
+    const fs=Array.isArray(doc.first_sentence) ? doc.first_sentence[0] : doc.first_sentence;
+    if(fs) text=String(fs).trim();
+  }
+  return text;
+}
+
 // returns a short array of genre/subject strings, or [] if none found
 export async function openLibrarySubjects(title,author){
   const params=new URLSearchParams({title:title||'', fields:'subject', limit:'1'});
