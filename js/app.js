@@ -216,6 +216,33 @@ function renderView(){
 
 // ================= DASHBOARD =================
 function greeting(){ const h=new Date().getHours(); return h<5?'Still up':h<12?'Good morning':h<17?'Good afternoon':h<22?'Good evening':'Still up'; }
+
+// Continue Reading's card order is sticky across re-renders: it's only
+// recomputed (most-recently-updated first) when the *set* of currently-
+// reading books changes, never on every stepper tap. Re-sorting on every
+// tap made a card jump to a different position the instant you tapped it,
+// so the next tap in the same spot landed on a different book.
+let continueOrderIds=null;
+function stableReadingOrder(){
+  const reading=S.readingList();
+  const curIds=reading.map(({b})=>b.id);
+  const curSet=new Set(curIds);
+  const sameSet = continueOrderIds && continueOrderIds.length===curIds.length && continueOrderIds.every(id=>curSet.has(id));
+  if(!sameSet){
+    const freshlySorted=reading.slice().sort((a,b)=>{
+      const da=S.det(a.b.id), db=S.det(b.b.id);
+      const pa=+da.pcurAt||0, pb=+db.pcurAt||0;
+      if(pa||pb) return pb-pa;
+      const sa=da.started||'', sb=db.started||'';
+      if(sa&&sb) return sb.localeCompare(sa); return sa?-1:sb?1:0;
+    });
+    continueOrderIds=freshlySorted.map(({b})=>b.id);
+    return freshlySorted;
+  }
+  const byId=new Map(reading.map(item=>[item.b.id,item]));
+  return continueOrderIds.map(id=>byId.get(id));
+}
+
 function renderDashboard(){
   const st=S.computeStats();
   const goal=S.getGoal();
@@ -244,16 +271,7 @@ function renderDashboard(){
       <button data-act="reminders-open">View</button>
     </section>` : '';
 
-  const reading=S.readingList();
-  // the most recently page-updated book sits on top — strongest signal for
-  // "this is what you're actually reading right now"
-  const ordered=reading.slice().sort((a,b)=>{
-    const da=S.det(a.b.id), db=S.det(b.b.id);
-    const pa=+da.pcurAt||0, pb=+db.pcurAt||0;
-    if(pa||pb) return pb-pa;
-    const sa=da.started||'', sb=db.started||'';
-    if(sa&&sb) return sb.localeCompare(sa); return sa?-1:sb?1:0;
-  });
+  const ordered=stableReadingOrder();
   const continueHtml = ordered.length ? `<div class="herostack">${ordered.map(({s,b})=>{
       const id=b.id, d=S.det(id); const standalone=s.series==='Standalone';
       const pct = d.ptot? Math.min(100,Math.round(100*(d.pcur||0)/d.ptot)) : null;
