@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v69';
+const APP_VERSION='v70';
 
 S.load();
 
@@ -1263,24 +1263,37 @@ let addSeriesVolumes=[];
 let addSeriesAlreadyCount=0;
 let addSeriesChecked=new Set();
 function addSeriesModalHtml(){
-  let body;
-  if(addSeriesStatus==='loading') body='<div class="empty-row">Looking up the series on Open Library…</div>';
-  else if(addSeriesStatus==='error') body=`<div class="empty-row">${esc(addSeriesError)}</div>`;
-  else if(!addSeriesVolumes.length) body='<div class="empty-row">No volumes found with that exact series name on Open Library. Try the Paste list tab instead.</div>';
-  else body='<div class="seriesvol-list">'+addSeriesVolumes.map((v,i)=>`
+  let body,sub;
+  if(addSeriesStatus==='loading'){ body='<div class="empty-row">Looking up the series on Open Library…</div>'; sub=''; }
+  else if(addSeriesStatus==='error'){ body=`<div class="empty-row">${esc(addSeriesError)}</div>`; sub=''; }
+  else if(!addSeriesVolumes.length){
+    // zero volumes after filtering out already-owned ones means two very
+    // different things: Open Library genuinely has nothing tagged with this
+    // exact series name, or it matched everything and you simply already
+    // own every volume — conflating those into one "not found" message is
+    // what made a complete collection look like a failed search
+    if(addSeriesAlreadyCount){
+      body=`<div class="empty-row">You already have all ${addSeriesAlreadyCount} volume${addSeriesAlreadyCount===1?'':'s'} of &ldquo;${esc(addSeriesName)}&rdquo; Open Library knows about, in your library.</div>`;
+    } else {
+      body='<div class="empty-row">No volumes found with that exact series name on Open Library. Try the Paste list tab instead.</div>';
+    }
+    sub='';
+  } else {
+    body='<div class="seriesvol-list">'+addSeriesVolumes.map((v,i)=>`
       <label class="seriesvol-row">
         <input type="checkbox" data-act="addseries-toggle" data-idx="${i}" ${addSeriesChecked.has(i)?'checked':''}>
         ${v.coverUrl?`<img src="${esc(v.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
         <span class="addsearch-meta"><b>${v.num?('#'+esc(v.num)+' &mdash; '):''}${esc(v.title)}</b>${v.author?'<br>'+esc(v.author):''}</span>
       </label>`).join('')+'</div>';
+    sub = addSeriesAlreadyCount ? `${addSeriesAlreadyCount} you already have ${addSeriesAlreadyCount===1?'was':'were'} left out.` : '';
+  }
   const n=addSeriesChecked.size;
-  const alreadyNote = addSeriesAlreadyCount ? `${addSeriesAlreadyCount} already in your library ${addSeriesAlreadyCount===1?'was':'were'} left out.` : '';
   return `<h3>Add &ldquo;${esc(addSeriesName)}&rdquo;</h3>
-    <p class="sub" style="margin:0 0 10px">Found on Open Library &mdash; uncheck any you don&rsquo;t want. ${alreadyNote}</p>
+    ${(body && addSeriesStatus==='ok' && addSeriesVolumes.length) ? `<p class="sub" style="margin:0 0 10px">Found on Open Library &mdash; uncheck any you don&rsquo;t want. ${sub}</p>` : ''}
     ${body}
     <div class="btnrow" style="margin-top:14px">
       <button class="btn ghost" data-act="close">Close</button>
-      <button class="btn primary" data-act="addseries-confirm" ${n?'':'disabled'}>Add ${n||''} book${n===1?'':'s'}</button>
+      ${addSeriesVolumes.length ? `<button class="btn primary" data-act="addseries-confirm" ${n?'':'disabled'}>Add ${n||''} book${n===1?'':'s'}</button>` : ''}
     </div>`;
 }
 function rerenderAddSeriesModal(){ if(!modalCtx) return; modalCtx.m.querySelector('.modal-body').innerHTML=addSeriesModalHtml(); }
