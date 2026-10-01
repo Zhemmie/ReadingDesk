@@ -222,6 +222,11 @@ export function removeBook(sn,b){
   delete status[b.id]; delete ratings[b.id]; delete details[b.id];
   Object.keys(notes).forEach(nid=>{ if(notes[nid].bookId===b.id){ tomb(nid); delete notes[nid]; } });
   Object.keys(reminders).forEach(rid=>{ if(reminders[rid].bookId===b.id){ tomb(rid); delete reminders[rid]; } });
+  // an emptied-out series (last book just removed) is dead weight sitting
+  // in the catalog forever otherwise — gone from the Library view already
+  // since nothing renders it, but still there to turn up in exports,
+  // duplicate-merge scans, and series-name autocomplete
+  if(!s.books.length && sn!=='Standalone'){ tomb(s.sid); catalog.series.splice(catalog.series.indexOf(s),1); }
   sCat(); sSt(); sRt(); sDet(); sNotes(); sRem();
 }
 export function removeSeries(name){
@@ -231,9 +236,6 @@ export function removeSeries(name){
   tomb(s.sid); catalog.series.splice(i,1);
   sCat(); sSt(); sRt(); sDet();
 }
-export function moveSeries(name,dir){ const i=catalog.series.findIndex(s=>s.series===name); const j=i+dir;
-  if(i<0||j<0||j>=catalog.series.length) return;
-  const [s]=catalog.series.splice(i,1); catalog.series.splice(j,0,s); touch('__order'); sCat(); }
 // swaps two series by name rather than raw adjacent index — the catalog
 // array also holds the Standalone "series" (usually last, but not
 // guaranteed), so a plain index-based move could silently swap past it;
@@ -258,7 +260,6 @@ export function moveBookInSeries(sid,bookId,dir){
 }
 
 // ---------- status / progress ----------
-export function cycle(id){ const cur=statusOf(id); const i=ORDER.indexOf(cur); return ORDER[(i+1)%ORDER.length]; }
 export function applyStatus(id,next){
   const cur=statusOf(id); if(cur===next) return;
   const d=det(id);

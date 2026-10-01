@@ -195,3 +195,45 @@
 }
 
 :root[data-theme="cyberpunk"] .themeopt[aria-pressed="true"]{ box-shadow:0 0 0 1px var(--accent), 0 0 14px -4px rgba(45,231,255,.5); }
+
+/* ---------- Discovery: seed chips, combobox, search/cart/series lists ---------- */
+:root[data-theme="cyberpunk"] .seedchip{
+  font-family:var(--font-body); text-transform:uppercase; letter-spacing:.04em; font-size:11px;
+  border:1px solid var(--border); border-radius:var(--radius-s); background:var(--bg-card);
+}
+:root[data-theme="cyberpunk"] .seedchip-clear{ color:var(--text-dim); }
+:root[data-theme="cyberpunk"] .seedchip-clear:hover{ color:var(--accent); }
+:root[data-theme="cyberpunk"] .combofield input{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .combofield input:focus{ box-shadow:0 0 0 1px var(--accent), 0 0 10px -4px rgba(45,231,255,.5); }
+:root[data-theme="cyberpunk"] .combo-panel{
+  border-radius:var(--radius-m); box-shadow:0 0 30px -10px rgba(45,231,255,.3), 0 14px 26px -14px rgba(0,0,0,.6);
+}
+:root[data-theme="cyberpunk"] .combo-group-label{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .combo-item{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .combo-item:hover,
+:root[data-theme="cyberpunk"] .combo-item:focus{ color:var(--accent); }
+
+:root[data-theme="cyberpunk"] .addsearch-item,
+:root[data-theme="cyberpunk"] .seriesvol-row,
+:root[data-theme="cyberpunk"] .cart-row{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-m);
+}
+:root[data-theme="cyberpunk"] .addsearch-item:hover,
+:root[data-theme="cyberpunk"] .seriesvol-row:hover{ border-color:var(--accent); box-shadow:0 0 14px -8px rgba(45,231,255,.4); }
+:root[data-theme="cyberpunk"] .addsearch-meta i{ color:var(--accent); font-style:normal; }
+:root[data-theme="cyberpunk"] .addsearch-nocoverthumb,
+:root[data-theme="cyberpunk"] .addsearch-item img,
+:root[data-theme="cyberpunk"] .seriesvol-row img,
+:root[data-theme="cyberpunk"] .cart-row img{ border-radius:3px; border:1px solid var(--border); }
+:root[data-theme="cyberpunk"] .cart-pos{ font-family:var(--font-body); color:var(--accent); text-shadow:0 0 6px rgba(45,231,255,.4); }
+:root[data-theme="cyberpunk"] .cart-ctl button,
+:root[data-theme="cyberpunk"] .series-reorder button,
+:root[data-theme="cyberpunk"] .book-reorder button{
+  border:1px solid var(--border); border-radius:var(--radius-s);
+}
+:root[data-theme="cyberpunk"] .cart-ctl button:not(:disabled):hover,
+:root[data-theme="cyberpunk"] .series-reorder button:not(:disabled):hover,
+:root[data-theme="cyberpunk"] .book-reorder button:not(:disabled):hover{ border-color:var(--accent); color:var(--accent); }
+
+:root[data-theme="cyberpunk"] .collapse-head{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .series-footer{ border-color:var(--border); }

@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v75';
+const APP_VERSION='v76';
 
 S.load();
 
@@ -794,6 +794,7 @@ function renderLibrary(){
           ${seriesReorder}
         </div>
         <div class="series-books">${rowsHtml}</div>
+        ${unfiltered?`<div class="series-footer"><button class="btn danger sm" data-act="series-delete" data-series="${esc(s.series)}">Delete series&hellip;</button></div>`:''}
       </section>`;
     }).join('') : '<div class="empty-row">No series yet. Tap + to add one.</div>';
   } else {
@@ -957,14 +958,25 @@ function detailHtml(id){
   const pal=(isCyberpunkTheme()?NIGHT_FAMILIES:FAMILIES).map(f=>f.dark);
   const swatches=pal.map(c=>`<button data-act="color-set" data-hex="${c}" style="background:${c};width:26px;height:26px;border-radius:50%;margin:3px;border:2px solid ${d.color===c?'var(--text)':'transparent'}"></button>`).join('');
 
-  const notesHtml=S.notesFor(id).map(n=>`
-    <div class="note-item">
+  const notesHtml=S.notesFor(id).map(n=>{
+    if(editingNoteId===n.nid) return `<div class="note-item">
+      <form data-act="note-edit-save" data-id="${id}" data-nid="${n.nid}" class="field">
+        <textarea name="text">${esc(n.text)}</textarea>
+        <div class="btnrow" style="margin-top:6px">
+          <button type="button" class="btn ghost sm" data-act="note-edit-cancel" data-id="${id}">Cancel</button>
+          <button type="submit" class="btn primary sm">Save</button>
+        </div>
+      </form>
+    </div>`;
+    return `<div class="note-item">
       <div class="note-meta"><span>${S.fmtDateTime(n.at)}${n.editedAt?' (edited)':''}</span></div>
       <div class="note-text">${esc(n.text)}</div>
       <div class="note-actions">
+        <button data-act="note-edit-start" data-nid="${n.nid}">Edit</button>
         <button data-act="note-delete" data-nid="${n.nid}">Delete</button>
       </div>
-    </div>`).join('') || '<div class="empty-row">No notes yet.</div>';
+    </div>`;
+  }).join('') || '<div class="empty-row">No notes yet.</div>';
 
   const reminders=S.remindersFor(id).filter(r=>!r.done);
   const remindersHtml=reminders.map(r=>`
@@ -975,7 +987,8 @@ function detailHtml(id){
     </div>`).join('');
 
   const reads=d.reads||[];
-  const readsHtml = reads.length ? reads.map((x,i)=>`<div class="kv"><span>Read ${i+1}</span><span>${S.fmtDate(x.started)||'?'} &rarr; ${S.fmtDate(x.finished)||'?'}</span></div>`).join('') : '';
+  const readsHtml = reads.length ? reads.map((x,i)=>`<div class="kv"><span>Read ${i+1}</span><span>${S.fmtDate(x.started)||'?'} &rarr; ${S.fmtDate(x.finished)||'?'}
+    <button class="iconlink" data-act="read-entry-delete" data-id="${id}" data-idx="${i}" style="margin-left:8px">Remove</button></span></div>`).join('') : '';
 
   return `
     <div class="detail-head">
@@ -1088,7 +1101,9 @@ function detailHtml(id){
     </div>
   `;
 }
+let editingNoteId=null;
 function openDetail(id){
+  editingNoteId=null;
   showModal(detailHtml(id),{
     onAction:(t,e,m)=>{
       const act=t.dataset.act, bid=t.dataset.id;
@@ -1119,6 +1134,13 @@ function openDetail(id){
       else if(act==='next-off'){ S.toggleNext(bid); rerenderDetail(bid); }
       else if(act==='note-add'){ const ta=t.querySelector('[name="text"]'); if(S.addNote(bid,ta.value)){ rerenderDetail(bid); toast('Note added'); } }
       else if(act==='note-delete'){ S.deleteNote(t.dataset.nid); rerenderDetail(bid||currentDetailId); }
+      else if(act==='note-edit-start'){ editingNoteId=t.dataset.nid; rerenderDetail(bid||currentDetailId); }
+      else if(act==='note-edit-cancel'){ editingNoteId=null; rerenderDetail(bid||currentDetailId); }
+      else if(act==='note-edit-save'){
+        const ta=t.querySelector('[name="text"]'); S.editNote(t.dataset.nid,ta.value);
+        editingNoteId=null; rerenderDetail(bid||currentDetailId);
+      }
+      else if(act==='read-entry-delete'){ S.removeReadEntry(bid,+t.dataset.idx); rerenderDetail(bid); }
       else if(act==='reminder-save'){
         const when=t.querySelector('[name="when"]').value; const note=t.querySelector('[name="note"]').value;
         if(when){ ensureNotifyPermission(); S.addReminder({bookId:bid,title:'',at:new Date(when).getTime(),note});
@@ -1652,6 +1674,14 @@ document.getElementById('view').addEventListener('click',e=>{
     const i=list.findIndex(x=>x.series===name), j=i+dir;
     if(i>=0 && j>=0 && j<list.length) S.swapSeriesOrder(name,list[j].series);
     refreshView();
+  }
+  else if(act==='series-delete'){
+    const name=t.dataset.series;
+    const found=S.findSeries(name); if(!found) return;
+    const n=found.books.length;
+    if(confirm('Delete the whole "'+name+'" series ('+n+' book'+(n===1?'':'s')+')? This can’t be undone.')){
+      S.removeSeries(name); refreshView(); toast('Series deleted.');
+    }
   }
   else if(act==='surprise'){ const pick=S.surprise(); pick?openDetail(pick.b.id):toast('Nothing unread to surprise you with.'); }
   else if(act==='theme-pick'){ setTheme(t.dataset.theme); }

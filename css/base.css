@@ -197,6 +197,11 @@ a{ color:var(--accent); }
 .addsearch-meta i{ color:var(--text-dim); font-size:12px; }
 .addsearch-row{ display:flex; flex-direction:column; gap:4px; }
 .addsearch-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-left:46px; }
+/* long button labels (e.g. "Add the whole ... series") must wrap onto their
+   own row rather than overflow — flex:none on .btn.sm otherwise locks them
+   to their unwrapped max-content width, which runs off-screen once the
+   cyberpunk theme's uppercase+letter-spacing text styling widens them */
+.addsearch-actions .btn.sm.addseries-link{ flex:1 1 100%; white-space:normal; }
 
 .seriesvol-list{ display:flex; flex-direction:column; gap:6px; max-height:360px; overflow-y:auto; }
 .seriesvol-row{ display:flex; gap:10px; align-items:flex-start; padding:8px; border-radius:var(--radius-s);
@@ -237,6 +242,8 @@ a{ color:var(--accent); }
 .series-group[data-open="true"] .series-caret{ transform:rotate(90deg); }
 .series-books{ display:none; border-top:1px solid var(--border); }
 .series-group[data-open="true"] .series-books{ display:block; }
+.series-footer{ display:none; padding:8px 14px; border-top:1px solid var(--divider); justify-content:flex-end; }
+.series-group[data-open="true"] .series-footer{ display:flex; }
 .series-reorder{ display:flex; align-items:center; gap:4px; flex:none; padding-right:10px; }
 .series-reorder button{ width:26px; height:26px; display:grid; place-items:center; border-radius:var(--radius-s); background:var(--bg-elev); color:var(--text-dim); font-size:12px; }
 .series-reorder button:disabled{ opacity:.3; }
