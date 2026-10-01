@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v65';
+const APP_VERSION='v66';
 
 S.load();
 
@@ -299,10 +299,22 @@ function discoverEntryFor(seedTitles,key,proxy){
   if(!entry){
     entry={status:'loading'};
     discoverCache.set(cacheKey,entry);
-    Discover.tasteDiveSimilar(seedTitles,key,10,proxy).then(items=>{
+    Discover.tasteDiveSimilar(seedTitles,key,10,proxy).then(async items=>{
       const existing=new Set(S.allBooks().map(x=>S.displayTitle(x.b).toLowerCase()));
       const filtered=items.filter(it=>!existing.has(it.title.toLowerCase()));
-      discoverCache.set(cacheKey,{status:'ok',items:filtered});
+      // TasteDive only ever gives a title (plus series/# when it's embedded in
+      // the title text) — no author. Open Library search is a second, best-
+      // effort lookup per result to fill that in (and a cover, and series/#
+      // when TasteDive didn't have it); one failed lookup never drops the
+      // result, it's just shown without an author.
+      const enriched=await Promise.all(filtered.map(async it=>{
+        try{
+          const [match]=await Discover.openLibrarySearch(it.title,1);
+          if(!match) return it;
+          return {...it, author:match.author||'', series:it.series||match.series||'', num:it.num||match.num||'', coverUrl:match.coverUrl||''};
+        }catch(e){ return it; }
+      }));
+      discoverCache.set(cacheKey,{status:'ok',items:enriched});
       if(currentView==='dashboard'||currentView==='discover') refreshView();
     }).catch(err=>{
       discoverCache.set(cacheKey,{status:'error',error:(err&&err.message)||'Something went wrong.'});
@@ -331,10 +343,11 @@ function discoverSectionHtml(){
       <button class="btn ghost sm" data-act="discover-retry" data-seed="${esc(cacheKey)}" style="margin-top:8px">Retry</button></div>`;
   else if(!entry.items.length) body=`<div class="empty-row">No new suggestions from <i>${esc(seedTitle)}</i> right now.</div>`;
   else body=`<div class="hscroll">${entry.items.map(it=>`
-      <article class="chipcard discover-card" data-act="discover-preview" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" role="button" tabindex="0">
+      <article class="chipcard discover-card" data-act="discover-preview" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" data-author="${esc(it.author)}" data-cover="${esc(it.coverUrl)}" role="button" tabindex="0">
         <div class="chipcard-title">${esc(it.title)}</div>
+        ${it.author?`<div class="chipcard-author">${esc(it.author)}</div>`:''}
         <div class="chipcard-reason">${it.series?esc(it.series+(it.num?' #'+it.num:'')):'Similar to '+esc(seedTitle)}</div>
-        <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}">+ Add</button>
+        <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" data-author="${esc(it.author)}" data-cover="${esc(it.coverUrl)}">+ Add</button>
       </article>`).join('')}</div>`;
   return `<section class="dash-section">
     <div class="sec-head"><h2>Discover</h2><button class="seeall" data-act="open-discover">See more &rsaquo;</button></div>
@@ -449,10 +462,11 @@ function renderDiscoverPage(){
         <button class="btn ghost sm" data-act="discover-retry" data-seed="${esc(cacheKey)}" style="margin-top:8px">Retry</button></div>`;
     else if(!entry.items.length) body=`<div class="empty-row">No new suggestions from <i>${esc(seedLabel)}</i> right now.</div>`;
     else body=`<div class="discover-grid">${entry.items.map(it=>`
-        <article class="chipcard discover-card" data-act="discover-preview" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" role="button" tabindex="0">
+        <article class="chipcard discover-card" data-act="discover-preview" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" data-author="${esc(it.author)}" data-cover="${esc(it.coverUrl)}" role="button" tabindex="0">
           <div class="chipcard-title">${esc(it.title)}</div>
+          ${it.author?`<div class="chipcard-author">${esc(it.author)}</div>`:''}
           <div class="chipcard-reason">${it.series?esc(it.series+(it.num?' #'+it.num:'')):(seeds.length>1?'From your picks':'Similar to '+esc(seedLabel))}</div>
-          <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}">+ Add</button>
+          <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" data-author="${esc(it.author)}" data-cover="${esc(it.coverUrl)}">+ Add</button>
         </article>`).join('')}</div>`;
   }
 
@@ -471,7 +485,7 @@ function renderDiscoverPage(){
 // nowhere in store.js to persist them; re-opened previews just re-fetch
 const discoverPreviewCache=new Map();
 let previewCtx=null;
-function discoverPreviewHtml(title,series,num){
+function discoverPreviewHtml(title,series,num,author,coverUrl){
   const key=(title||'').toLowerCase();
   const entry=discoverPreviewCache.get(key);
   let body;
@@ -479,12 +493,17 @@ function discoverPreviewHtml(title,series,num){
   else if(entry.status==='error') body=`<p class="sub" style="margin:0">${esc(entry.error)}</p>`;
   else if(entry.status==='ok' && entry.text) body=`<p class="sub" style="margin:0;white-space:pre-wrap">${esc(entry.text)}</p>`;
   else body='<p class="sub" style="margin:0">No synopsis found for this one on Open Library.</p>';
-  return `<h3>${esc(title)}</h3>
-    ${series?`<div class="detail-sub">${esc(series+(num?' #'+num:''))}</div>`:''}
+  return `<div class="detail-head">
+      ${coverUrl?`<div class="bookcover size-lg realcover"><img class="bc-photo" src="${esc(coverUrl)}" alt="Cover of ${esc(title)}"></div>`:''}
+      <div>
+        <div class="detail-title">${esc(title)}</div>
+        ${author||series?`<div class="detail-sub">${esc([author,series+(num?' #'+num:'')].filter(Boolean).join(' · '))}</div>`:''}
+      </div>
+    </div>
     <div class="detail-section" style="margin-top:16px"><h4>Synopsis</h4>${body}</div>
     <div class="btnrow" style="margin-top:16px">
       <button class="btn ghost" data-act="close">Close</button>
-      <button class="btn primary" data-act="preview-add" data-title="${esc(title)}" data-series="${esc(series)}" data-num="${esc(num)}">+ Add to library</button>
+      <button class="btn primary" data-act="preview-add" data-title="${esc(title)}" data-series="${esc(series)}" data-num="${esc(num)}" data-author="${esc(author)}" data-cover="${esc(coverUrl)}">+ Add to library</button>
     </div>`;
 }
 function ensurePreviewSynopsis(title){
@@ -501,16 +520,17 @@ function ensurePreviewSynopsis(title){
 }
 function rerenderPreview(){
   if(!modalCtx || !previewCtx) return;
-  modalCtx.m.querySelector('.modal-body').innerHTML=discoverPreviewHtml(previewCtx.title,previewCtx.series,previewCtx.num);
+  modalCtx.m.querySelector('.modal-body').innerHTML=discoverPreviewHtml(previewCtx.title,previewCtx.series,previewCtx.num,previewCtx.author,previewCtx.coverUrl);
 }
-function openDiscoverPreview(title,series,num){
-  previewCtx={title,series,num};
-  showModal(discoverPreviewHtml(title,series,num),{
+function openDiscoverPreview(title,series,num,author,coverUrl){
+  previewCtx={title,series,num,author,coverUrl};
+  showModal(discoverPreviewHtml(title,series,num,author,coverUrl),{
     onAction:(t)=>{
       if(t.dataset.act==='close'){ closeModal(); return; }
       if(t.dataset.act==='preview-add'){
-        const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,status:'unread'});
+        const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,author:t.dataset.author,status:'unread'});
         if(entry){
+          if(t.dataset.cover) S.setCover(entry.id,t.dataset.cover);
           discoverCache.forEach(c=>{ if(c.status==='ok') c.items=c.items.filter(it=>it.title!==t.dataset.title); });
           toast('Added “'+S.displayTitle(entry)+'” ✓');
           closeModal(); refreshView();
@@ -1162,10 +1182,13 @@ let pendingAddCover='';
 function addSearchResultsHtml(){
   if(!addSearchResults.length) return '';
   return '<div class="addsearch-results">'+addSearchResults.map((r,i)=>`
-      <button type="button" class="addsearch-item" data-act="add-search-pick" data-idx="${i}">
-        ${r.coverUrl?`<img src="${esc(r.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
-        <span class="addsearch-meta"><b>${esc(r.title)}</b>${r.author?' &mdash; '+esc(r.author):''}${r.year?' ('+r.year+')':''}${r.series?`<br><i>${esc(r.series+(r.num?' #'+r.num:''))}</i>`:''}</span>
-      </button>`).join('')+'</div>';
+      <div class="addsearch-row">
+        <button type="button" class="addsearch-item" data-act="add-search-pick" data-idx="${i}">
+          ${r.coverUrl?`<img src="${esc(r.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
+          <span class="addsearch-meta"><b>${esc(r.title)}</b>${r.author?' &mdash; '+esc(r.author):''}${r.year?' ('+r.year+')':''}${r.series?`<br><i>${esc(r.series+(r.num?' #'+r.num:''))}</i>`:''}</span>
+        </button>
+        ${r.series?`<button type="button" class="btn ghost sm addseries-link" data-act="add-series-open" data-series="${esc(r.series)}">Add the whole "${esc(r.series)}" series&hellip;</button>`:''}
+      </div>`).join('')+'</div>';
 }
 // its own tiny <form> (not nested in the add-book form) so Enter in the
 // search box searches instead of submitting the book — the modal's generic
@@ -1180,6 +1203,81 @@ function searchAssistHtml(hint){
     <div id="addSearchResults">${addSearchResultsHtml()}</div>
   </form>`;
 }
+// ---------- "add entire series" modal ----------
+// opened from a search result that has a detected series — fetches every
+// volume Open Library has tagged with that exact series name and lets the
+// person review/deselect before actually adding anything, since the series
+// match is a best-effort text parse (see discover.js openLibrarySeries)
+let addSeriesName='';
+let addSeriesStatus='loading'; // loading|ok|error
+let addSeriesError='';
+let addSeriesVolumes=[];
+let addSeriesAlreadyCount=0;
+let addSeriesChecked=new Set();
+function addSeriesModalHtml(){
+  let body;
+  if(addSeriesStatus==='loading') body='<div class="empty-row">Looking up the series on Open Library…</div>';
+  else if(addSeriesStatus==='error') body=`<div class="empty-row">${esc(addSeriesError)}</div>`;
+  else if(!addSeriesVolumes.length) body='<div class="empty-row">No volumes found with that exact series name on Open Library. Try the Paste list tab instead.</div>';
+  else body='<div class="seriesvol-list">'+addSeriesVolumes.map((v,i)=>`
+      <label class="seriesvol-row">
+        <input type="checkbox" data-act="addseries-toggle" data-idx="${i}" ${addSeriesChecked.has(i)?'checked':''}>
+        ${v.coverUrl?`<img src="${esc(v.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
+        <span class="addsearch-meta"><b>${v.num?('#'+esc(v.num)+' &mdash; '):''}${esc(v.title)}</b>${v.author?'<br>'+esc(v.author):''}</span>
+      </label>`).join('')+'</div>';
+  const n=addSeriesChecked.size;
+  const alreadyNote = addSeriesAlreadyCount ? `${addSeriesAlreadyCount} already in your library ${addSeriesAlreadyCount===1?'was':'were'} left out.` : '';
+  return `<h3>Add &ldquo;${esc(addSeriesName)}&rdquo;</h3>
+    <p class="sub" style="margin:0 0 10px">Found on Open Library &mdash; uncheck any you don&rsquo;t want. ${alreadyNote}</p>
+    ${body}
+    <div class="btnrow" style="margin-top:14px">
+      <button class="btn ghost" data-act="close">Close</button>
+      <button class="btn primary" data-act="addseries-confirm" ${n?'':'disabled'}>Add ${n||''} book${n===1?'':'s'}</button>
+    </div>`;
+}
+function rerenderAddSeriesModal(){ if(!modalCtx) return; modalCtx.m.querySelector('.modal-body').innerHTML=addSeriesModalHtml(); }
+function openAddSeriesModal(seriesName){
+  addSeriesName=seriesName; addSeriesStatus='loading'; addSeriesVolumes=[]; addSeriesAlreadyCount=0; addSeriesChecked=new Set();
+  showModal(addSeriesModalHtml(),{
+    onAction:(t)=>{
+      if(t.dataset.act==='close'){ closeModal(); return; }
+      if(t.dataset.act==='addseries-toggle'){
+        // reads the checkbox's own current .checked rather than toggling Set
+        // membership blindly: clicking anywhere in its <label> natively
+        // flips the box and fires both 'click' and 'change' (both routed
+        // here), so syncing to its actual state is what stays correct
+        // either way, instead of a toggle that would double-fire and cancel
+        const idx=+t.dataset.idx;
+        if(t.checked) addSeriesChecked.add(idx); else addSeriesChecked.delete(idx);
+        rerenderAddSeriesModal();
+        return;
+      }
+      if(t.dataset.act==='addseries-confirm'){
+        let added=0;
+        addSeriesVolumes.forEach((v,i)=>{
+          if(!addSeriesChecked.has(i)) return;
+          const entry=S.addBook({series:addSeriesName,num:v.num,title:v.title,author:v.author,status:'unread'});
+          if(entry){ added++; if(v.coverUrl) S.setCover(entry.id,v.coverUrl); }
+        });
+        toast(added+' book'+(added===1?'':'s')+' added to “'+addSeriesName+'” ✓');
+        closeModal(); refreshView();
+        return;
+      }
+    }
+  });
+  Discover.openLibrarySeries(seriesName).then(vols=>{
+    const existingTitles=new Set(S.allBooks().map(x=>S.displayTitle(x.b).toLowerCase()));
+    addSeriesAlreadyCount=vols.filter(v=>existingTitles.has(v.title.toLowerCase())).length;
+    addSeriesVolumes=vols.filter(v=>!existingTitles.has(v.title.toLowerCase()));
+    addSeriesStatus='ok';
+    addSeriesChecked=new Set(addSeriesVolumes.map((_,i)=>i));
+    rerenderAddSeriesModal();
+  }).catch(err=>{
+    addSeriesStatus='error'; addSeriesError=(err&&err.message)||'Could not fetch the series.';
+    rerenderAddSeriesModal();
+  });
+}
+
 function addModalHtml(){
   const seriesNames=S.catalog.series.filter(x=>x.series!=='Standalone').map(x=>x.series);
   const datalist=`<datalist id="seriesList">${seriesNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
@@ -1254,6 +1352,7 @@ function openAddModal(){
         });
         return;
       }
+      if(act==='add-series-open'){ openAddSeriesModal(t.dataset.series); return; }
       if(act==='add-search-pick'){
         const r=addSearchResults[+t.dataset.idx]; if(!r) return;
         const f=m.querySelector('form[data-act="quick-submit"], form[data-act="paste-submit"]');
@@ -1366,10 +1465,11 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='discoverseed-remove'){ removeDiscoverSeed(+t.dataset.idx); }
   else if(act==='discoverseeds-clear'){ discoverSeeds=[]; refreshView(); }
   else if(act==='discover-retry'){ discoverCache.delete(t.dataset.seed); refreshView(); }
-  else if(act==='discover-preview'){ openDiscoverPreview(t.dataset.title,t.dataset.series,t.dataset.num); }
+  else if(act==='discover-preview'){ openDiscoverPreview(t.dataset.title,t.dataset.series,t.dataset.num,t.dataset.author,t.dataset.cover); }
   else if(act==='discover-add'){
-    const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,status:'unread'});
+    const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,author:t.dataset.author,status:'unread'});
     if(entry){
+      if(t.dataset.cover) S.setCover(entry.id,t.dataset.cover);
       const c=discoverCache.get(t.dataset.seed);
       if(c && c.status==='ok') c.items=c.items.filter(it=>it.title!==t.dataset.title);
       toast('Added “'+S.displayTitle(entry)+'” ✓');

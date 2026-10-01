@@ -93,6 +93,43 @@ export async function openLibrarySearch(query,limit){
   }).filter(r=>r.title);
 }
 
+// returns every volume of a series Open Library's search turns up, as
+// {title,num,author,year,coverUrl}, sorted by number. Open Library has no
+// "get series X" endpoint — this searches by the series name itself (a
+// generous limit, since a long-running series needs many hits) and keeps
+// only results whose own title parses as "Book (seriesName, #N)", the same
+// format cleanTitle() already relies on elsewhere. That means it only finds
+// what Open Library itself tagged that way — good for well-known series,
+// easy to miss obscure ones — so the caller should let the person review
+// and deselect before actually adding anything.
+export async function openLibrarySeries(seriesName,limit){
+  limit=limit||50;
+  const q=String(seriesName||'').trim();
+  if(!q) return [];
+  const params=new URLSearchParams({q, fields:'title,author_name,first_publish_year,cover_i', limit:String(limit)});
+  const url='https://openlibrary.org/search.json?'+params.toString();
+  const json=await fetchJson(url);
+  const docs=json && Array.isArray(json.docs) ? json.docs : [];
+  const wantedSeries=q.toLowerCase();
+  const seen=new Set(), out=[];
+  for(const d of docs){
+    const parsed=cleanTitle(d.title);
+    if(!parsed.series || parsed.series.toLowerCase()!==wantedSeries) continue;
+    const key=parsed.title.toLowerCase()+'|'+parsed.num;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      title: parsed.title,
+      num: parsed.num,
+      author: Array.isArray(d.author_name) ? d.author_name[0] : '',
+      year: d.first_publish_year || '',
+      coverUrl: d.cover_i ? ('https://covers.openlibrary.org/b/id/'+d.cover_i+'-M.jpg') : ''
+    });
+  }
+  out.sort((a,b)=>(parseFloat(a.num)||0)-(parseFloat(b.num)||0));
+  return out;
+}
+
 // returns a synopsis string (possibly '' if nothing was found). Open Library's
 // search results don't carry the full description, only a work "key" — so
 // this is two requests: find the work, then fetch its full record. Falls

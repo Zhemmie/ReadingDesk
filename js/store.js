@@ -185,7 +185,10 @@ export function addBook({series,num,title,author,fmt,status:initStatus}){
   title=(title||'').trim(); if(!title) return null;
   const sName=(series||'').trim() || 'Standalone';
   let s=findSeries(sName);
-  if(!s) s=addSeries(sName,'');
+  // a brand-new series records the author at the series level (existing
+  // series keep whatever they already have); only Standalone keeps it
+  // per-book, since each standalone title can have a different author
+  if(!s) s=addSeries(sName, sName==='Standalone'?'':(author||'').trim());
   const entry={id:newId('b_'), num:(sName==='Standalone'?'':(num||'').trim()), title};
   if(sName==='Standalone' && author) entry.author=(author||'').trim();
   if(entry.num) insertByNumber(s.books,entry); else s.books.push(entry);
