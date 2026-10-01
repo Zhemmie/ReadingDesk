@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v61';
+const APP_VERSION='v62';
 
 S.load();
 
@@ -277,6 +277,13 @@ function discoverSeedBook(){
   const reading=S.readingList();
   return reading.length ? reading[0] : null;
 }
+// the dashboard's Discover row seeds strictly off whatever's on top of
+// Continue Reading (same book, same order) — not top-rated — so it always
+// reads as "because you're reading X", not an unrelated favorites pick
+function activeReadingSeedBook(){
+  const ordered=stableReadingOrder();
+  return ordered.length ? ordered[0] : null;
+}
 // shared by the dashboard's "Discover" row and the standalone Discovery page —
 // both key off the same title-keyed cache, so switching between them (or
 // jumping in from a book's detail) never re-fetches the same seed twice
@@ -307,7 +314,7 @@ function discoverSectionHtml(){
         <button class="btn ghost sm" data-act="open-settings" style="margin-top:8px">Open Settings</button></div>
     </section>`;
   }
-  const seed=discoverSeedBook();
+  const seed=activeReadingSeedBook();
   if(!seed) return '';
   const seedTitle=S.displayTitle(seed.b);
   const cacheKey=seedTitle.toLowerCase();
