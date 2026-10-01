@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v66';
+const APP_VERSION='v67';
 
 S.load();
 
@@ -274,15 +274,12 @@ function stableReadingOrder(){
 // this seed right now, kick off a fetch if there's nothing there yet, and
 // let the fetch's completion trigger a refresh.
 const discoverCache=new Map();
-function discoverSeedBook(){
-  const rated=S.allBooks().filter(x=>S.ratings[x.b.id]).sort((a,b)=>(S.ratings[b.b.id]||0)-(S.ratings[a.b.id]||0));
-  if(rated.length) return rated[0];
-  const reading=S.readingList();
-  return reading.length ? reading[0] : null;
-}
-// the dashboard's Discover row seeds strictly off whatever's on top of
-// Continue Reading (same book, same order) — not top-rated — so it always
-// reads as "because you're reading X", not an unrelated favorites pick
+// the automatic pick for both the dashboard's Discover row and the
+// Discovery page (when nothing's been searched yet) seeds strictly off
+// whatever's on top of Continue Reading — not top-rated — so it always
+// reads as "because you're reading X" and stays the same book in both
+// places, rather than surprising you with an unrelated old favorite every
+// time the app restarts and the Discovery page's in-memory search resets
 function activeReadingSeedBook(){
   const ordered=stableReadingOrder();
   return ordered.length ? ordered[0] : null;
@@ -364,7 +361,7 @@ function discoverSectionHtml(){
 // already fetched
 function currentDiscoverSeeds(){
   if(discoverSeeds!==null) return discoverSeeds;
-  const auto=discoverSeedBook();
+  const auto=activeReadingSeedBook();
   return auto ? [S.displayTitle(auto.b)] : [];
 }
 function addDiscoverSeed(title){
