@@ -174,10 +174,12 @@
 :root[data-theme="cyberpunk"] .modal-x:hover{ border-color:var(--accent); color:var(--accent); }
 :root[data-theme="cyberpunk"] .field input,
 :root[data-theme="cyberpunk"] .field select,
-:root[data-theme="cyberpunk"] .field textarea{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .field textarea,
+:root[data-theme="cyberpunk"] .progress-edit input{ font-family:var(--font-body); }
 :root[data-theme="cyberpunk"] .field input:focus,
 :root[data-theme="cyberpunk"] .field select:focus,
-:root[data-theme="cyberpunk"] .field textarea:focus{ box-shadow:0 0 0 1px var(--accent), 0 0 10px -4px rgba(45,231,255,.5); }
+:root[data-theme="cyberpunk"] .field textarea:focus,
+:root[data-theme="cyberpunk"] .progress-edit input:focus{ box-shadow:0 0 0 1px var(--accent), 0 0 10px -4px rgba(45,231,255,.5); }
 
 :root[data-theme="cyberpunk"] .statcard{ background:var(--bg-card); border:1px solid var(--border); box-shadow:0 0 14px -9px rgba(45,231,255,.25); }
 :root[data-theme="cyberpunk"] .statcard b{ text-shadow:0 0 8px rgba(45,231,255,.4); }

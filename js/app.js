@@ -8,6 +8,10 @@ import * as S from './store.js';
 import * as Sync from './sync.js';
 import * as Covers from './covers.js';
 
+// bump alongside the CACHE version in sw.js — shown in Settings so you can
+// confirm a device actually picked up a new deploy after refreshing
+const APP_VERSION='v57';
+
 S.load();
 
 // ---------- tiny DOM/string helpers ----------
@@ -560,6 +564,13 @@ function renderSettings(){
     </div>
 
     <div class="setgroup">
+      <h3>Troubleshooting</h3>
+      <div class="setrow"><span>App version</span><span>${APP_VERSION}</span></div>
+      <p class="sub" style="margin:10px 0">If you've updated the app but it still looks old, your device may be stuck on a cached copy. This clears it and reloads immediately.</p>
+      <button class="btn ghost sm" data-act="force-refresh">Force refresh app</button>
+    </div>
+
+    <div class="setgroup">
       <h3>About</h3>
       <div class="setrow"><span>Status colors</span><span></span></div>
       <div class="setrow"><span><span class="statusdot" style="--dot:var(--dot-unread)"></span> Unread</span><span></span></div>
@@ -935,6 +946,7 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='backup-save'){ downloadFile('reading-desk-backup.json',JSON.stringify(S.backupPayload(),null,1),'application/json'); S.noteBackup(); toast('Backup saved.'); }
   else if(act==='backup-load'){ document.getElementById('file').click(); }
   else if(act==='sync-now'){ Sync.syncNow(true); }
+  else if(act==='force-refresh'){ forceRefreshApp(); }
   else if(act==='sync-disconnect'){ Sync.disconnectSync(); refreshView(); toast('Sync disconnected on this device.'); }
   else if(act==='sync-reconnect'){ Sync.reconnectSharedGist(); }
   else if(act==='sync-connect'){
@@ -994,6 +1006,26 @@ function downloadFile(name,text,type){
   const blob=new Blob([text],{type}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
+}
+
+// unregisters the service worker and clears every cache this origin owns, then
+// reloads with a cache-busting URL so even a stubborn HTTP cache can't serve
+// the old index.html — the "I updated but it still looks old" escape hatch
+async function forceRefreshApp(){
+  toast('Refreshing…');
+  try{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+    if('caches' in window){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+  }catch(e){ /* best effort — reload regardless */ }
+  const url=new URL(location.href);
+  url.searchParams.set('_r', Date.now().toString(36));
+  location.replace(url.toString());
 }
 
 // ================= reminder polling =================

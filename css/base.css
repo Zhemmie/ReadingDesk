@@ -3,11 +3,17 @@
    theme-cyberpunk.css each define a complete set of them under :root[data-theme=...]. */
 
 *,*::before,*::after{ box-sizing:border-box; }
-html,body{ height:100%; }
+html,body{ height:100%; overflow-x:hidden; }
 body{
   margin:0; background:var(--bg); color:var(--text);
   font-family:var(--font-body); font-size:16px; line-height:1.4;
   -webkit-tap-highlight-color:transparent; overscroll-behavior-y:none;
+  max-width:100vw;
+  -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+}
+/* ...but actual content people might want to select/copy stays selectable */
+input,textarea,.note-text{
+  -webkit-user-select:text; user-select:text; -webkit-touch-callout:default;
 }
 h1,h2,h3{ font-family:var(--font-head); text-transform:var(--head-case,none); letter-spacing:var(--head-tracking,0); margin:0; }
 button,input,select,textarea{ font:inherit; color:inherit; }
@@ -231,7 +237,7 @@ a{ color:var(--accent); }
 .modtabs button{ flex:1; padding:8px; border-radius:calc(var(--radius-s) - 2px); font-size:13px; color:var(--text-dim); }
 .modtabs button[aria-pressed="true"]{ background:var(--bg-card); color:var(--text); box-shadow:var(--shadow-sm); }
 
-.btnrow{ display:flex; gap:10px; margin-top:16px; }
+.btnrow{ display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
 .btn{ padding:11px 16px; border-radius:var(--radius-s); font-size:14px; font-weight:600; flex:1; text-align:center; }
 .btn.primary{ background:var(--accent); color:var(--on-accent,#fff); }
 .btn.ghost{ background:var(--bg-elev); color:var(--text); border:1px solid var(--border); }
@@ -256,8 +262,10 @@ a{ color:var(--accent); }
 .stars button{ color:var(--border); }
 .stars button.on{ color:var(--star,#c9a227); }
 
-.progress-edit{ display:flex; gap:10px; align-items:center; }
-.progress-edit input{ width:90px; }
+.progress-edit{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.progress-edit input{ width:90px; padding:10px 12px; border-radius:var(--radius-s); border:1px solid var(--border);
+  background:var(--bg-elev); color:var(--text); outline:none; }
+.progress-edit input:focus{ border-color:var(--accent); }
 
 .detail-section{ margin-top:18px; }
 .detail-section h4{ font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); margin-bottom:8px; }
