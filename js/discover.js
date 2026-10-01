@@ -49,11 +49,18 @@ async function fetchJson(url){
 // TasteDive sends no CORS header, so this always goes through the user's own
 // Cloudflare Worker proxy (see /cloudflare-worker/worker.js) rather than
 // tastedive.com directly — a direct call would fail in every browser.
-export async function tasteDiveSimilar(seedTitle,key,limit,proxyUrl){
+// seedTitles may be a single string or an array — TasteDive's q parameter
+// accepts a comma-separated list of type:value pairs and blends them into
+// one set of recommendations, which is how several books can tailor a
+// single search (capped at 8 to stay within what the API accepts).
+export async function tasteDiveSimilar(seedTitles,key,limit,proxyUrl){
   limit=limit||8;
+  const titles=(Array.isArray(seedTitles)?seedTitles:[seedTitles]).map(t=>String(t||'').trim()).filter(Boolean).slice(0,8);
+  if(!titles.length) throw new Error('No seed title given.');
   if(!key) throw new Error('No TasteDive API key configured.');
   if(!proxyUrl) throw new Error('No CORS proxy URL configured — see Settings > Discovery for setup steps.');
-  const url=proxyUrl+(proxyUrl.includes('?')?'&':'?')+'api=tastedive&q='+qParam('book',seedTitle)+'&type=book&k='+encodeURIComponent(key)+'&limit='+limit;
+  const qVal=titles.map(t=>qParam('book',t)).join(',');
+  const url=proxyUrl+(proxyUrl.includes('?')?'&':'?')+'api=tastedive&q='+qVal+'&type=book&k='+encodeURIComponent(key)+'&limit='+limit;
   const json=await fetchJson(url);
   const results=json && json.similar && Array.isArray(json.similar.results) ? json.similar.results : null;
   if(!results) throw new Error('Unexpected response from TasteDive — check that your API key is valid.');

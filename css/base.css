@@ -164,6 +164,12 @@ a{ color:var(--accent); }
 .discover-card .chipcard-title{ -webkit-line-clamp:3; }
 
 /* ---------- discovery page ---------- */
+.seedchips{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.seedchip{ display:inline-flex; align-items:center; gap:6px; background:var(--chip-bg); color:var(--text-dim);
+  border:1px solid var(--border); border-radius:99px; padding:5px 6px 5px 12px; font-size:13px; }
+.seedchip button{ width:18px; height:18px; display:grid; place-items:center; border-radius:50%; color:var(--text-faint); font-size:14px; line-height:1; }
+.seedchip button:hover{ background:var(--bg-elev); color:var(--text); }
+.seedchip-clear{ padding:5px 12px; cursor:pointer; }
 .seekrow{ display:flex; gap:8px; margin-bottom:14px; }
 .combofield{ position:relative; flex:1; min-width:0; }
 .combofield input{ width:100%; padding:10px 12px; border-radius:var(--radius-s); border:1px solid var(--border);

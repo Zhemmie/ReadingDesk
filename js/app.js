@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v64';
+const APP_VERSION='v65';
 
 S.load();
 
@@ -217,10 +217,13 @@ let currentView='dashboard';
 let statusFilter='all', fmtFilter='all', ratingFilter='all', searchQuery='';
 let libTab='series';
 const openSeries=new Set();
-// the Discovery page's seed title: empty means "use the automatic pick"
-// (top-rated or currently-reading book); set explicitly when the user types
-// a title there, or jumps in from a book's detail via "Find similar books"
-let discoverPageSeedTitle='';
+// the Discovery page's seed titles (multi-select — TasteDive blends several
+// books into one search): null means "not customized yet, use the automatic
+// pick" (top-rated or currently-reading book); once the user adds or removes
+// anything it becomes a real array (possibly empty) under their own control.
+// Jumping in from a book's detail via "Find similar books" sets it to that
+// one book explicitly.
+let discoverSeeds=null;
 
 function setView(v){ currentView=v;
   $all('.tab').forEach(t=>t.setAttribute('aria-selected', String(t.dataset.view===v)));
@@ -285,15 +288,18 @@ function activeReadingSeedBook(){
   return ordered.length ? ordered[0] : null;
 }
 // shared by the dashboard's "Discover" row and the standalone Discovery page —
-// both key off the same title-keyed cache, so switching between them (or
-// jumping in from a book's detail) never re-fetches the same seed twice
-function discoverEntryFor(seedTitle,key,proxy){
-  const cacheKey=seedTitle.toLowerCase();
+// both key off the same seed-set-keyed cache, so switching between them (or
+// jumping in from a book's detail) never re-fetches the same seed twice.
+// seedTitles is always an array now (1 item from the dashboard, 1+ from the
+// Discovery page's multi-select), and the cache key reflects the whole set.
+function discoverCacheKey(seedTitles){ return seedTitles.map(t=>t.toLowerCase()).join('|'); }
+function discoverEntryFor(seedTitles,key,proxy){
+  const cacheKey=discoverCacheKey(seedTitles);
   let entry=discoverCache.get(cacheKey);
   if(!entry){
     entry={status:'loading'};
     discoverCache.set(cacheKey,entry);
-    Discover.tasteDiveSimilar(seedTitle,key,10,proxy).then(items=>{
+    Discover.tasteDiveSimilar(seedTitles,key,10,proxy).then(items=>{
       const existing=new Set(S.allBooks().map(x=>S.displayTitle(x.b).toLowerCase()));
       const filtered=items.filter(it=>!existing.has(it.title.toLowerCase()));
       discoverCache.set(cacheKey,{status:'ok',items:filtered});
@@ -317,8 +323,8 @@ function discoverSectionHtml(){
   const seed=activeReadingSeedBook();
   if(!seed) return '';
   const seedTitle=S.displayTitle(seed.b);
-  const cacheKey=seedTitle.toLowerCase();
-  const entry=discoverEntryFor(seedTitle,key,proxy);
+  const cacheKey=discoverCacheKey([seedTitle]);
+  const entry=discoverEntryFor([seedTitle],key,proxy);
   let body;
   if(entry.status==='loading') body=`<div class="empty-row">Looking for books like <i>${esc(seedTitle)}</i>…</div>`;
   else if(entry.status==='error') body=`<div class="empty-row">${esc(entry.error)}
@@ -337,13 +343,27 @@ function discoverSectionHtml(){
 }
 
 // ================= DISCOVERY PAGE =================
-// a dedicated page version of the dashboard's Discover row: lets you search
-// on any title (not just the automatic pick) and shares the same cache, so
-// jumping here from a book's detail ("Find similar books") or from the
-// dashboard's "See more" link shows results instantly if already fetched
-function runDiscoverSeedSearch(v){
-  const val=(v||'').trim(); if(!val) return;
-  discoverPageSeedTitle=val;
+// a dedicated page version of the dashboard's Discover row: lets you build
+// up a multi-book search (TasteDive blends several seeds into one set of
+// recommendations) instead of just the one automatic pick, and shares the
+// same cache, so jumping here from a book's detail ("Find similar books")
+// or from the dashboard's "See more" link shows results instantly if
+// already fetched
+function currentDiscoverSeeds(){
+  if(discoverSeeds!==null) return discoverSeeds;
+  const auto=discoverSeedBook();
+  return auto ? [S.displayTitle(auto.b)] : [];
+}
+function addDiscoverSeed(title){
+  const val=(title||'').trim(); if(!val) return;
+  const base=currentDiscoverSeeds();
+  if(base.some(s=>s.toLowerCase()===val.toLowerCase())){ toast('Already in your search.'); return; }
+  if(base.length>=8){ toast('Up to 8 titles at once.'); return; }
+  discoverSeeds=base.concat([val]);
+  if(currentView==='discover') refreshView();
+}
+function removeDiscoverSeed(idx){
+  discoverSeeds=currentDiscoverSeeds().filter((_,i)=>i!==idx);
   if(currentView==='discover') refreshView();
 }
 // library titles grouped for the Discovery page's seed picker: singles
@@ -360,7 +380,7 @@ function discoverComboGroups(filterText){
 }
 function discoverComboListHtml(filterText){
   const {singleBooks,seriesGroups}=discoverComboGroups(filterText);
-  if(!singleBooks.length && !seriesGroups.length) return '<div class="combo-empty">No library matches &mdash; press Find to search this title anyway.</div>';
+  if(!singleBooks.length && !seriesGroups.length) return '<div class="combo-empty">No library matches &mdash; press Add to search this title anyway.</div>';
   let html='';
   if(singleBooks.length) html+='<div class="combo-group"><div class="combo-group-label">Singles</div>'+
     singleBooks.map(b=>`<button type="button" class="combo-item" data-act="combo-pick" data-title="${esc(S.displayTitle(b))}">${esc(S.displayTitle(b))}</button>`).join('')+'</div>';
@@ -370,44 +390,47 @@ function discoverComboListHtml(filterText){
 }
 // wired by hand (not the usual delegated re-render) so typing in the seed
 // input never loses focus/cursor position — only the panel's own innerHTML
-// is touched on each keystroke; selecting a result still goes through the
+// is touched on each keystroke; adding a seed still goes through the
 // normal refreshView() path since that's a discrete action, not typing
 function wireDiscoverCombo(){
   const input=document.getElementById('discoverSeedInput');
   const panel=document.getElementById('discoverCombo');
   if(!input || !panel) return;
   const close=()=>{ panel.hidden=true; };
-  // focusing shows the full browsable list regardless of any prefilled value
-  // (and selects it, so the first keystroke starts a fresh filter) — typing
-  // after that narrows live via the 'input' listener
   input.addEventListener('focus',()=>{ panel.innerHTML=discoverComboListHtml(''); panel.hidden=false; input.select(); });
   input.addEventListener('input',()=>{ panel.innerHTML=discoverComboListHtml(input.value); panel.hidden=false; });
-  input.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ close(); return; }
+    if(e.key==='Enter'){ e.preventDefault(); close(); addDiscoverSeed(input.value); }
+  });
   input.addEventListener('blur',()=>{ setTimeout(close,150); });
   panel.addEventListener('mousedown',e=>{
     const b=e.target.closest('[data-act="combo-pick"]'); if(!b) return;
     e.preventDefault();
     close();
-    runDiscoverSeedSearch(b.dataset.title);
+    addDiscoverSeed(b.dataset.title);
   });
 }
 function renderDiscoverPage(){
   const key=S.getTasteDiveKey(), proxy=S.getTasteDiveProxy();
-  const autoSeed=discoverSeedBook();
-  const seedTitle = discoverPageSeedTitle || (autoSeed ? S.displayTitle(autoSeed.b) : '');
-  const seekbar=`<div class="seekrow">
+  const seeds=currentDiscoverSeeds();
+  const chipsHtml = seeds.length ? `<div class="seedchips">${seeds.map((title,i)=>
+      `<span class="seedchip">${esc(title)}<button type="button" data-act="discoverseed-remove" data-idx="${i}" aria-label="Remove ${esc(title)}">&times;</button></span>`).join('')}
+      ${seeds.length>1?`<button type="button" class="seedchip seedchip-clear" data-act="discoverseeds-clear">Clear all</button>`:''}
+    </div>` : '';
+  const seekbar=`${chipsHtml}<div class="seekrow">
       <div class="combofield">
-        <input id="discoverSeedInput" value="${esc(seedTitle)}" placeholder="e.g. The Hobbit — or type any title" autocomplete="off">
+        <input id="discoverSeedInput" placeholder="${seeds.length?'Add another title…':'e.g. The Hobbit — or type any title'}" autocomplete="off">
         <div class="combo-panel" id="discoverCombo" hidden></div>
       </div>
-      <button class="btn primary" data-act="discoverpage-find">Find</button>
+      <button class="btn primary" data-act="discoverseed-add">Add</button>
     </div>`;
 
   if(!key || !proxy){
     return `<div class="dash">
       <section class="dash-section">
         <div class="sec-head"><h2>Discovery</h2></div>
-        <p class="sub" style="margin:0 0 10px">Find books similar to any title &mdash; in your library or not.</p>
+        <p class="sub" style="margin:0 0 10px">Find books similar to one or more titles &mdash; in your library or not.</p>
         <div class="empty-row">Connect TasteDive in Settings first.
           <button class="btn ghost sm" data-act="open-settings" style="margin-top:8px">Open Settings</button></div>
       </section>
@@ -415,19 +438,20 @@ function renderDiscoverPage(){
   }
 
   let body;
-  if(!seedTitle){
-    body=`<div class="empty-row">Type a title above, or add and rate a few favorites to get automatic picks.</div>`;
+  if(!seeds.length){
+    body=`<div class="empty-row">Add a title above, or add and rate a few favorites to get automatic picks.</div>`;
   } else {
-    const cacheKey=seedTitle.toLowerCase();
-    const entry=discoverEntryFor(seedTitle,key,proxy);
-    if(entry.status==='loading') body=`<div class="empty-row">Looking for books like <i>${esc(seedTitle)}</i>…</div>`;
+    const cacheKey=discoverCacheKey(seeds);
+    const seedLabel = seeds.length>1 ? seeds.length+' titles' : seeds[0];
+    const entry=discoverEntryFor(seeds,key,proxy);
+    if(entry.status==='loading') body=`<div class="empty-row">Looking for books like <i>${esc(seedLabel)}</i>…</div>`;
     else if(entry.status==='error') body=`<div class="empty-row">${esc(entry.error)}
         <button class="btn ghost sm" data-act="discover-retry" data-seed="${esc(cacheKey)}" style="margin-top:8px">Retry</button></div>`;
-    else if(!entry.items.length) body=`<div class="empty-row">No new suggestions from <i>${esc(seedTitle)}</i> right now.</div>`;
+    else if(!entry.items.length) body=`<div class="empty-row">No new suggestions from <i>${esc(seedLabel)}</i> right now.</div>`;
     else body=`<div class="discover-grid">${entry.items.map(it=>`
         <article class="chipcard discover-card" data-act="discover-preview" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}" role="button" tabindex="0">
           <div class="chipcard-title">${esc(it.title)}</div>
-          <div class="chipcard-reason">${it.series?esc(it.series+(it.num?' #'+it.num:'')):'Similar to '+esc(seedTitle)}</div>
+          <div class="chipcard-reason">${it.series?esc(it.series+(it.num?' #'+it.num:'')):(seeds.length>1?'From your picks':'Similar to '+esc(seedLabel))}</div>
           <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}">+ Add</button>
         </article>`).join('')}</div>`;
   }
@@ -435,7 +459,7 @@ function renderDiscoverPage(){
   return `<div class="dash">
     <section class="dash-section">
       <div class="sec-head"><h2>Discovery</h2></div>
-      <p class="sub" style="margin:0 0 10px">Find books similar to any title &mdash; in your library or not.</p>
+      <p class="sub" style="margin:0 0 10px">Find books similar to one or more titles &mdash; in your library or not.</p>
       ${seekbar}
       ${body}
     </section>
@@ -998,7 +1022,7 @@ function openDetail(id){
       }
       else if(act==='discover-open'){
         const found=S.bookById(bid); if(!found) return;
-        discoverPageSeedTitle=S.displayTitle(found.b);
+        discoverSeeds=[S.displayTitle(found.b)];
         closeModal(); setView('discover');
       }
       else if(act==='next-on'){ S.toggleNext(bid); rerenderDetail(bid); }
@@ -1338,7 +1362,9 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='goal-open') openGoalModal();
   else if(act==='open-settings') setView('settings');
   else if(act==='open-discover') setView('discover');
-  else if(act==='discoverpage-find'){ const inp=document.getElementById('discoverSeedInput'); runDiscoverSeedSearch(inp&&inp.value); }
+  else if(act==='discoverseed-add'){ const inp=document.getElementById('discoverSeedInput'); addDiscoverSeed(inp&&inp.value); }
+  else if(act==='discoverseed-remove'){ removeDiscoverSeed(+t.dataset.idx); }
+  else if(act==='discoverseeds-clear'){ discoverSeeds=[]; refreshView(); }
   else if(act==='discover-retry'){ discoverCache.delete(t.dataset.seed); refreshView(); }
   else if(act==='discover-preview'){ openDiscoverPreview(t.dataset.title,t.dataset.series,t.dataset.num); }
   else if(act==='discover-add'){
@@ -1390,9 +1416,6 @@ document.getElementById('view').addEventListener('change',e=>{
   else if(t.dataset.act==='devname-input'){ Sync.setDevName(t.value); }
 });
 document.getElementById('view').addEventListener('keydown',e=>{
-  if(e.key==='Enter' && e.target && e.target.id==='discoverSeedInput'){
-    e.preventDefault(); runDiscoverSeedSearch(e.target.value); return;
-  }
   if(e.key!=='Enter' && e.key!==' ') return;
   const t=e.target.closest('[data-act="pgcur-edit"]'); if(!t) return;
   e.preventDefault(); startPcurEdit(t,t.dataset.id);
