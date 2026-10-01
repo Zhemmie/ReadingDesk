@@ -234,6 +234,28 @@ export function removeSeries(name){
 export function moveSeries(name,dir){ const i=catalog.series.findIndex(s=>s.series===name); const j=i+dir;
   if(i<0||j<0||j>=catalog.series.length) return;
   const [s]=catalog.series.splice(i,1); catalog.series.splice(j,0,s); touch('__order'); sCat(); }
+// swaps two series by name rather than raw adjacent index — the catalog
+// array also holds the Standalone "series" (usually last, but not
+// guaranteed), so a plain index-based move could silently swap past it;
+// the caller works out real neighbors within the series the person
+// actually sees (Standalone excluded) and names them explicitly instead
+export function swapSeriesOrder(nameA,nameB){
+  const i=catalog.series.findIndex(s=>s.series===nameA);
+  const j=catalog.series.findIndex(s=>s.series===nameB);
+  if(i<0||j<0) return;
+  const tmp=catalog.series[i]; catalog.series[i]=catalog.series[j]; catalog.series[j]=tmp;
+  touch('__order'); sCat();
+}
+// manual book reordering within one series — independent of each book's
+// `num` label, which stays whatever it is (editable via Rename) rather
+// than being silently rewritten to match the new position
+export function moveBookInSeries(sid,bookId,dir){
+  const s=catalog.series.find(x=>x.sid===sid); if(!s) return;
+  const i=s.books.findIndex(b=>b.id===bookId); if(i<0) return;
+  const j=i+dir; if(j<0||j>=s.books.length) return;
+  const [b]=s.books.splice(i,1); s.books.splice(j,0,b);
+  touch(s.sid); sCat();
+}
 
 // ---------- status / progress ----------
 export function cycle(id){ const cur=statusOf(id); const i=ORDER.indexOf(cur); return ORDER[(i+1)%ORDER.length]; }

@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v74';
+const APP_VERSION='v75';
 
 S.load();
 
@@ -477,7 +477,8 @@ function renderDiscoverSimilarSection(){
 // in by hand, pasting a list, or importing a file — every way of getting a
 // book into the library starts here now, not from a FAB-opened modal
 function renderDiscoverAddSection(){
-  return `<p class="sub" style="margin:0 0 10px">Search to see a book&rsquo;s cover, synopsis, genres &mdash; and its whole series, if it has one &mdash; before adding it.</p>
+  return `${cartHtml()}
+    <p class="sub" style="margin:0 0 10px">Search to see a book&rsquo;s cover, synopsis, genres &mdash; and its whole series, if it has one &mdash; before adding it.</p>
     ${searchAssistHtml()}
     <div class="btnrow" style="margin-top:4px">
       <button class="btn ghost sm" data-act="manual-add-open">Add manually</button>
@@ -705,11 +706,15 @@ function passesFilter(s,b){
   return true;
 }
 function statusDotStyle(id){ return 'var(--dot-'+S.statusOf(id)+')'; }
-function bookRowHtml(s,b){
+// reorder: null for a plain row, or {isFirst,isLast} to show up/down arrows
+// — only offered where the displayed order is actually the real order (the
+// unfiltered series view), never on a filtered/searched subset where
+// "up"/"down" would skip over hidden books in a confusing way
+function bookRowHtml(s,b,reorder){
   const id=b.id; const r=S.ratings[id]||0; const d=S.det(id);
   const sub=[]; if(s.series!=='Standalone' && b.num) sub.push('#'+b.num); const a=S.authorOf(s,b); if(a) sub.push(a);
   if(d.fmt==='audio') sub.push('\u{1F3A7}'); if(d.fmt==='manga') sub.push('\u{1F4D5}');
-  return `<button class="book-row" data-act="open" data-id="${id}">
+  const main=`<button class="book-row-main" data-act="open" data-id="${id}">
     <span class="statusdot" style="--dot:${statusDotStyle(id)}"></span>
     <span class="book-main">
       <span class="book-title">${esc(S.displayTitle(b))}</span>
@@ -717,6 +722,11 @@ function bookRowHtml(s,b){
     </span>
     ${r?`<span class="book-stars">${'★'.repeat(r)}</span>`:''}
   </button>`;
+  const reorderCtl = reorder ? `<span class="book-reorder">
+      <button type="button" data-act="book-move-up" data-sid="${s.sid}" data-id="${id}" ${reorder.isFirst?'disabled':''} aria-label="Move up">&uarr;</button>
+      <button type="button" data-act="book-move-down" data-sid="${s.sid}" data-id="${id}" ${reorder.isLast?'disabled':''} aria-label="Move down">&darr;</button>
+    </span>` : '';
+  return `<div class="book-row">${main}${reorderCtl}</div>`;
 }
 function renderLibrary(){
   const chips=['all','unread','reading','read','dnf'].map(f=>
@@ -759,18 +769,31 @@ function renderLibrary(){
   let body;
   if(libTab==='series'){
     const list=S.catalog.series.filter(s=>s.series!=='Standalone');
-    body = list.length ? list.map(s=>{
+    // reordering (both books within a series, and series among each other)
+    // only makes sense against the real, complete order — not a filtered
+    // view where some books are hidden and "up"/"down" would be misleading
+    const unfiltered = statusFilter==='all' && fmtFilter==='all' && ratingFilter==='all';
+    body = list.length ? list.map((s,si)=>{
       const books=s.books.filter(b=>passesFilter(s,b));
       if(!books.length) return '';
       const open=openSeries.has(s.sid);
       const total=s.books.length, done=s.books.filter(b=>S.statusOf(b.id)==='read').length;
+      const canReorderBooks = unfiltered && books.length>1;
+      const rowsHtml = books.map((b,i)=>bookRowHtml(s,b,canReorderBooks?{isFirst:i===0,isLast:i===books.length-1}:null)).join('');
+      const seriesReorder = unfiltered && list.length>1 ? `<span class="series-reorder">
+          <button type="button" data-act="series-move-up" data-series="${esc(s.series)}" ${si===0?'disabled':''} aria-label="Move ${esc(s.series)} up">&uarr;</button>
+          <button type="button" data-act="series-move-down" data-series="${esc(s.series)}" ${si===list.length-1?'disabled':''} aria-label="Move ${esc(s.series)} down">&darr;</button>
+        </span>` : '';
       return `<section class="series-group" data-open="${open}">
-        <button class="series-head" data-act="series-toggle" data-sid="${s.sid}">
-          <span class="series-name">${esc(s.series)}</span>
-          <span class="series-count">${done}/${total}</span>
-          <span class="series-caret" aria-hidden="true">&#8250;</span>
-        </button>
-        <div class="series-books">${books.map(b=>bookRowHtml(s,b)).join('')}</div>
+        <div class="series-head-row">
+          <button class="series-head" data-act="series-toggle" data-sid="${s.sid}">
+            <span class="series-name">${esc(s.series)}</span>
+            <span class="series-count">${done}/${total}</span>
+            <span class="series-caret" aria-hidden="true">&#8250;</span>
+          </button>
+          ${seriesReorder}
+        </div>
+        <div class="series-books">${rowsHtml}</div>
       </section>`;
     }).join('') : '<div class="empty-row">No series yet. Tap + to add one.</div>';
   } else {
@@ -1248,6 +1271,60 @@ function openRename(id){
 // applies it directly on add.
 let addSearchResults=[];
 let addSearchQuery='';
+
+// ---------- book cart (manual series-building) ----------
+// series auto-detection (Open Library's text/field, Wikidata's structured
+// claims) is a best effort — some series just aren't tagged anywhere, or
+// get mismatched. The cart is the manual fallback: search, stage several
+// books, reorder them, then commit the whole set as one series in its own
+// order rather than whatever a lookup guessed. New items are inserted at
+// their chronological slot by publication year (unknown years sort last),
+// not appended — that's the "sorted by publication date by default" — but
+// once in the cart, order is entirely under manual control via the arrows.
+let bookCart=[];
+function addToCart(item){
+  if(!item || !item.title) return;
+  if(bookCart.some(x=>x.title.toLowerCase()===item.title.toLowerCase())){ toast('Already in your cart.'); return; }
+  const y=parseInt(item.year,10)||Infinity;
+  let idx=bookCart.findIndex(x=>(parseInt(x.year,10)||Infinity)>y);
+  if(idx<0) idx=bookCart.length;
+  bookCart.splice(idx,0,item);
+  refreshView();
+  toast('Added to cart ✓');
+}
+function moveCartItem(idx,dir){
+  const j=idx+dir; if(j<0||j>=bookCart.length) return;
+  const tmp=bookCart[idx]; bookCart[idx]=bookCart[j]; bookCart[j]=tmp;
+  refreshView();
+}
+function cartHtml(){
+  if(!bookCart.length) return '';
+  const rows=bookCart.map((item,i)=>`
+      <div class="cart-row">
+        <span class="cart-pos">${i+1}</span>
+        ${item.coverUrl?`<img src="${esc(item.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
+        <span class="addsearch-meta"><b>${esc(item.title)}</b>${item.author?' &mdash; '+esc(item.author):''}${item.year?' ('+item.year+')':''}</span>
+        <span class="cart-ctl">
+          <button type="button" data-act="cart-up" data-idx="${i}" ${i===0?'disabled':''} aria-label="Move up">&uarr;</button>
+          <button type="button" data-act="cart-down" data-idx="${i}" ${i===bookCart.length-1?'disabled':''} aria-label="Move down">&darr;</button>
+          <button type="button" data-act="cart-remove" data-idx="${i}" aria-label="Remove">&times;</button>
+        </span>
+      </div>`).join('');
+  return `<div class="detail-section">
+    <h4>Cart (${bookCart.length})</h4>
+    <p class="sub" style="margin:0 0 10px">Sorted by publication date &mdash; use the arrows to reorder, then add it all as one series.</p>
+    <div class="cart-list">${rows}</div>
+    <form data-act="cart-create" class="field" style="margin-top:10px">
+      <label>Series name</label>
+      <div class="seekrow">
+        <input type="text" name="seriesName" list="seriesList" placeholder="New or existing series name" required autocomplete="off">
+        <button type="submit" class="btn primary">Add as series</button>
+      </div>
+    </form>
+    ${seriesDatalistHtml()}
+    <button type="button" class="btn ghost sm" data-act="cart-clear">Clear cart</button>
+  </div>`;
+}
 function addSearchResultsHtml(){
   const bookList = addSearchResults.length
     ? '<div class="addsearch-results">'+addSearchResults.map((r,i)=>`
@@ -1256,7 +1333,10 @@ function addSearchResultsHtml(){
             ${r.coverUrl?`<img src="${esc(r.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
             <span class="addsearch-meta"><b>${esc(r.title)}</b>${r.author?' &mdash; '+esc(r.author):''}${r.year?' ('+r.year+')':''}${r.series?`<br><i>${esc(r.series+(r.num?' #'+r.num:''))}</i>`:''}</span>
           </button>
-          ${r.series?`<button type="button" class="btn ghost sm addseries-link" data-act="add-series-open" data-series="${esc(r.series)}">Add the whole "${esc(r.series)}" series&hellip;</button>`:''}
+          <div class="addsearch-actions">
+            <button type="button" class="btn ghost sm" data-act="cart-add" data-idx="${i}">+ Cart</button>
+            ${r.series?`<button type="button" class="btn ghost sm addseries-link" data-act="add-series-open" data-series="${esc(r.series)}">Add the whole "${esc(r.series)}" series&hellip;</button>`:''}
+          </div>
         </div>`).join('')+'</div>'
     : (addSearchQuery ? '<div class="empty-row">No book matches.</div>' : '');
   // search also works as a series-name lookup: whatever you typed is tried
@@ -1540,6 +1620,11 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='add-search-preview'){
     const r=addSearchResults[+t.dataset.idx]; if(r) openDiscoverPreview(r.title,r.series,r.num,r.author,r.coverUrl);
   }
+  else if(act==='cart-add'){ addToCart(addSearchResults[+t.dataset.idx]); }
+  else if(act==='cart-up'){ moveCartItem(+t.dataset.idx,-1); }
+  else if(act==='cart-down'){ moveCartItem(+t.dataset.idx,1); }
+  else if(act==='cart-remove'){ bookCart.splice(+t.dataset.idx,1); refreshView(); }
+  else if(act==='cart-clear'){ bookCart=[]; refreshView(); }
   else if(act==='discoverseed-add'){ const inp=document.getElementById('discoverSeedInput'); addDiscoverSeed(inp&&inp.value); }
   else if(act==='discoverseed-remove'){ removeDiscoverSeed(+t.dataset.idx); }
   else if(act==='discoverseeds-clear'){ discoverSeeds=[]; refreshView(); }
@@ -1558,6 +1643,16 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='filter'){ statusFilter=t.dataset.filter; refreshView(); }
   else if(act==='seg'){ libTab=t.dataset.tab; refreshView(); }
   else if(act==='series-toggle'){ const sid=t.dataset.sid; openSeries.has(sid)?openSeries.delete(sid):openSeries.add(sid); refreshView(); }
+  else if(act==='book-move-up'){ S.moveBookInSeries(t.dataset.sid,t.dataset.id,-1); refreshView(); }
+  else if(act==='book-move-down'){ S.moveBookInSeries(t.dataset.sid,t.dataset.id,1); refreshView(); }
+  else if(act==='series-move-up'||act==='series-move-down'){
+    const dir=act==='series-move-up'?-1:1;
+    const name=t.dataset.series;
+    const list=S.catalog.series.filter(x=>x.series!=='Standalone');
+    const i=list.findIndex(x=>x.series===name), j=i+dir;
+    if(i>=0 && j>=0 && j<list.length) S.swapSeriesOrder(name,list[j].series);
+    refreshView();
+  }
   else if(act==='surprise'){ const pick=S.surprise(); pick?openDetail(pick.b.id):toast('Nothing unread to surprise you with.'); }
   else if(act==='theme-pick'){ setTheme(t.dataset.theme); }
   else if(act==='goal-clear'){ S.clearGoal(); refreshView(); }
@@ -1599,25 +1694,46 @@ document.getElementById('view').addEventListener('keydown',e=>{
   const t=e.target.closest('[data-act="pgcur-edit"]'); if(!t) return;
   e.preventDefault(); startPcurEdit(t,t.dataset.id);
 });
-// the only page-level <form> outside a modal — Discovery's "Add a book"
-// search box — so a single dedicated listener covers it rather than
-// building out the modal system's generic form-routing for one case
+// the only page-level <form>s outside a modal — Discovery's "Add a book"
+// search box and the cart's "add as series" form — so one dedicated
+// listener covers both rather than building out the modal system's
+// generic form-routing for page content
 document.getElementById('view').addEventListener('submit',e=>{
-  const t=e.target.closest('form'); if(!t || t.dataset.act!=='add-search') return;
-  e.preventDefault();
-  const q=(t.q.value||'').trim();
-  addSearchQuery=q; addSearchResults=[];
-  const box=document.getElementById('addSearchResults');
-  if(!q){ if(box) box.innerHTML=''; return; }
-  if(box) box.innerHTML='<div class="empty-row">Searching Open Library…</div>';
-  Discover.openLibrarySearch(q).then(results=>{
-    addSearchResults=results;
-    const liveBox=document.getElementById('addSearchResults');
-    if(liveBox) liveBox.innerHTML=addSearchResultsHtml();
-  }).catch(err=>{
-    const liveBox=document.getElementById('addSearchResults');
-    if(liveBox) liveBox.innerHTML=`<div class="empty-row">${esc((err&&err.message)||'Search failed.')}</div>`;
-  });
+  const t=e.target.closest('form'); if(!t) return;
+  if(t.dataset.act==='add-search'){
+    e.preventDefault();
+    const q=(t.q.value||'').trim();
+    addSearchQuery=q; addSearchResults=[];
+    const box=document.getElementById('addSearchResults');
+    if(!q){ if(box) box.innerHTML=''; return; }
+    if(box) box.innerHTML='<div class="empty-row">Searching Open Library…</div>';
+    Discover.openLibrarySearch(q).then(results=>{
+      addSearchResults=results;
+      const liveBox=document.getElementById('addSearchResults');
+      if(liveBox) liveBox.innerHTML=addSearchResultsHtml();
+    }).catch(err=>{
+      const liveBox=document.getElementById('addSearchResults');
+      if(liveBox) liveBox.innerHTML=`<div class="empty-row">${esc((err&&err.message)||'Search failed.')}</div>`;
+    });
+    return;
+  }
+  if(t.dataset.act==='cart-create'){
+    e.preventDefault();
+    const sn=(t.seriesName.value||'').trim(); if(!sn || !bookCart.length) return;
+    // appends after whatever the series already has, rather than always
+    // starting numbering at 1 — lets the cart be used to add a few more
+    // volumes to an existing series too, not just build a brand-new one
+    const existing=S.findSeries(sn);
+    const startNum=existing ? existing.books.length : 0;
+    let added=0;
+    bookCart.forEach((item,i)=>{
+      const entry=S.addBook({series:sn,num:String(startNum+i+1),title:item.title,author:item.author,status:'unread'});
+      if(entry){ added++; if(item.coverUrl) S.setCover(entry.id,item.coverUrl); }
+    });
+    bookCart=[];
+    toast(added+' book'+(added===1?'':'s')+' added to “'+sn+'” ✓');
+    refreshView();
+  }
 });
 function startPcurEdit(span,id){
   const inp=document.createElement('input');
