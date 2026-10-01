@@ -35,11 +35,15 @@ async function fetchJson(url){
   catch(e){ throw new Error('Got an unexpected response back. Try again.'); }
 }
 
-// returns [{title,series,num}], already stripped of series-number suffixes
-export async function tasteDiveSimilar(seedTitle,key,limit){
+// returns [{title,series,num}], already stripped of series-number suffixes.
+// TasteDive sends no CORS header, so this always goes through the user's own
+// Cloudflare Worker proxy (see /cloudflare-worker/worker.js) rather than
+// tastedive.com directly — a direct call would fail in every browser.
+export async function tasteDiveSimilar(seedTitle,key,limit,proxyUrl){
   limit=limit||8;
   if(!key) throw new Error('No TasteDive API key configured.');
-  const url='https://tastedive.com/api/similar?q='+qParam('book',seedTitle)+'&type=book&k='+encodeURIComponent(key)+'&limit='+limit;
+  if(!proxyUrl) throw new Error('No CORS proxy URL configured — see Settings > Discovery for setup steps.');
+  const url=proxyUrl+(proxyUrl.includes('?')?'&':'?')+'api=tastedive&q='+qParam('book',seedTitle)+'&type=book&k='+encodeURIComponent(key)+'&limit='+limit;
   const json=await fetchJson(url);
   const results=json && json.similar && Array.isArray(json.similar.results) ? json.similar.results : null;
   if(!results) throw new Error('Unexpected response from TasteDive — check that your API key is valid.');

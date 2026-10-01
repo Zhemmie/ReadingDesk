@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v58';
+const APP_VERSION='v59';
 
 S.load();
 
@@ -273,8 +273,8 @@ function discoverSeedBook(){
   return reading.length ? reading[0] : null;
 }
 function discoverSectionHtml(){
-  const key=S.getTasteDiveKey();
-  if(!key){
+  const key=S.getTasteDiveKey(), proxy=S.getTasteDiveProxy();
+  if(!key || !proxy){
     return `<section class="dash-section">
       <div class="sec-head"><h2>Discover</h2></div>
       <div class="empty-row">Connect TasteDive in Settings to see books like your favorites that aren’t in your library yet.
@@ -289,7 +289,7 @@ function discoverSectionHtml(){
   if(!entry){
     entry={status:'loading'};
     discoverCache.set(cacheKey,entry);
-    Discover.tasteDiveSimilar(seedTitle,key,8).then(items=>{
+    Discover.tasteDiveSimilar(seedTitle,key,8,proxy).then(items=>{
       const existing=new Set(S.allBooks().map(x=>S.displayTitle(x.b).toLowerCase()));
       const filtered=items.filter(it=>!existing.has(it.title.toLowerCase()));
       discoverCache.set(cacheKey,{status:'ok',items:filtered});
@@ -603,13 +603,15 @@ function renderSettings(){
 
     <div class="setgroup">
       <h3>Discovery</h3>
-      ${S.getTasteDiveKey() ? `
+      ${(S.getTasteDiveKey() && S.getTasteDiveProxy()) ? `
         <div class="setrow"><span>TasteDive</span><span>Connected</span></div>
         <p class="sub" style="margin:10px 0">Powers the "Discover" row on your dashboard — books similar to your top-rated ones that aren't in your library yet.</p>
         <button class="btn danger sm" data-act="taste-disconnect">Disconnect</button>
       ` : `
-        <p class="sub" style="margin:0 0 10px">Paste a free <a href="https://tastedive.com/read/api" target="_blank" rel="noopener">TasteDive</a> API key to get a "Discover" row on your dashboard: books similar to your top-rated ones that aren't in your library yet. Stays on this device, like your sync token.</p>
-        <div class="field"><input id="tasteInput" placeholder="e.g. 1079186-YourApp-xxxxxxxx" autocomplete="off"></div>
+        <p class="sub" style="margin:0 0 10px">Paste a free <a href="https://tastedive.com/read/api" target="_blank" rel="noopener">TasteDive</a> API key to get a "Discover" row on your dashboard: books similar to your top-rated ones that aren't in your library yet.</p>
+        <div class="field"><label>TasteDive API key</label><input id="tasteInput" value="${esc(S.getTasteDiveKey())}" placeholder="e.g. 1079186-YourApp-xxxxxxxx" autocomplete="off"></div>
+        <p class="sub" style="margin:0 0 10px">TasteDive's API blocks direct calls from a browser (no CORS header on their end), so this also needs a small free proxy you deploy yourself — your key goes only from your device to your own proxy to TasteDive, never anywhere else. <a href="https://github.com/Zhemmie/ReadingDesk/tree/main/cloudflare-worker" target="_blank" rel="noopener">Setup steps (~5 min, free Cloudflare account)</a>.</p>
+        <div class="field"><label>CORS proxy URL</label><input id="tasteProxyInput" value="${esc(S.getTasteDiveProxy())}" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="off"></div>
         <button class="btn primary" data-act="taste-connect">Connect</button>
       `}
     </div>
@@ -1071,11 +1073,13 @@ document.getElementById('view').addEventListener('click',e=>{
     if(r) toast('Removed “'+r.name+'”.','Undo',r.undo);
   }
   else if(act==='taste-connect'){
-    const inp=document.getElementById('tasteInput'); const k=(inp.value||'').trim();
-    if(!k){ toast('Paste a key first.'); return; }
-    S.setTasteDiveKey(k); discoverCache.clear(); refreshView(); toast('Connected ✓');
+    const k=(document.getElementById('tasteInput').value||'').trim();
+    const p=(document.getElementById('tasteProxyInput').value||'').trim();
+    if(!k){ toast('Paste your TasteDive key first.'); return; }
+    if(!p){ toast('Paste your proxy URL too — see the setup steps link above.'); return; }
+    S.setTasteDiveKey(k); S.setTasteDiveProxy(p); discoverCache.clear(); refreshView(); toast('Connected ✓');
   }
-  else if(act==='taste-disconnect'){ S.setTasteDiveKey(''); discoverCache.clear(); refreshView(); toast('Disconnected on this device.'); }
+  else if(act==='taste-disconnect'){ S.setTasteDiveKey(''); S.setTasteDiveProxy(''); discoverCache.clear(); refreshView(); toast('Disconnected on this device.'); }
 });
 document.getElementById('view').addEventListener('change',e=>{
   const t=e.target.closest('[data-act]'); if(!t) return;

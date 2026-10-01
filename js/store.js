@@ -8,7 +8,7 @@ export const K_NOTES='rl.notes.v1', K_REM='rl.reminders.v1';
 export const K_GOAL='rl.goal', K_THEME='rl.theme', K_BKUP='rl.lastBackupAt';
 export const SK_TOKEN='rl.sync.token', SK_GIST='rl.sync.gist', SK_LAST='rl.sync.lastAt';
 export const SK_DEVID='rl.sync.devid', SK_DEVNAME='rl.sync.devname';
-export const K_TASTE='rl.discover.tastedive';
+export const K_TASTE='rl.discover.tastedive', K_TASTE_PROXY='rl.discover.proxy';
 
 export const ORDER=['unread','reading','read','dnf'];
 export const ST_LABEL={unread:'Unread',reading:'Reading',read:'Read',dnf:'Set aside'};
@@ -250,9 +250,15 @@ export function clearCover(id){ const d=details[id]; if(d && d.cover){ delete d.
 export function genresFor(id){ return (details[id] && details[id].genres) || null; }
 export function setGenres(id,arr){ det(id).genres=arr; touch(id); sDet(); }
 
-// ---------- TasteDive discovery key (local only, not synced — like a device setting) ----------
+// ---------- TasteDive discovery key + CORS-proxy URL (local only, not synced — like a device setting) ----------
+// TasteDive's API sends no Access-Control-Allow-Origin header, so it can't be
+// called directly from page JS (works fine pasted into the address bar,
+// fails from fetch() — classic CORS). Requests go through the user's own
+// Cloudflare Worker (see /cloudflare-worker) instead of TasteDive directly.
 export function getTasteDiveKey(){ return localStorage.getItem(K_TASTE)||''; }
 export function setTasteDiveKey(k){ k=(k||'').trim(); try{ if(k) localStorage.setItem(K_TASTE,k); else localStorage.removeItem(K_TASTE); }catch(e){} }
+export function getTasteDiveProxy(){ return localStorage.getItem(K_TASTE_PROXY)||''; }
+export function setTasteDiveProxy(u){ u=(u||'').trim().replace(/\/$/,''); try{ if(u) localStorage.setItem(K_TASTE_PROXY,u); else localStorage.removeItem(K_TASTE_PROXY); }catch(e){} }
 export function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today();
   markActiveToday(); clearCoverIfDone(id); touch(id); sSt(); sDet(); }
 export function setPages(id,which,val){ const d=det(id); const n=Math.max(0,Math.round(+val||0));
