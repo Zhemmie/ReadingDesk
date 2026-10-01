@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v67';
+const APP_VERSION='v68';
 
 S.load();
 
@@ -224,6 +224,12 @@ const openSeries=new Set();
 // Jumping in from a book's detail via "Find similar books" sets it to that
 // one book explicitly.
 let discoverSeeds=null;
+// the Discovery page's top-level split: 'add' (search Open Library / manual
+// entry / paste / import — everywhere adding a book now starts) or
+// 'similar' (the TasteDive multi-seed search). The "+" FAB and the
+// "Find similar books" / "See more" entry points each force the relevant
+// one; the bottom nav's own Discover tab leaves it as whatever was last used.
+let discoverPageTab='add';
 
 function setView(v){ currentView=v;
   $all('.tab').forEach(t=>t.setAttribute('aria-selected', String(t.dataset.view===v)));
@@ -421,7 +427,7 @@ function wireDiscoverCombo(){
     addDiscoverSeed(b.dataset.title);
   });
 }
-function renderDiscoverPage(){
+function renderDiscoverSimilarSection(){
   const key=S.getTasteDiveKey(), proxy=S.getTasteDiveProxy();
   const seeds=currentDiscoverSeeds();
   const chipsHtml = seeds.length ? `<div class="seedchips">${seeds.map((title,i)=>
@@ -437,19 +443,14 @@ function renderDiscoverPage(){
     </div>`;
 
   if(!key || !proxy){
-    return `<div class="dash">
-      <section class="dash-section">
-        <div class="sec-head"><h2>Discovery</h2></div>
-        <p class="sub" style="margin:0 0 10px">Find books similar to one or more titles &mdash; in your library or not.</p>
-        <div class="empty-row">Connect TasteDive in Settings first.
-          <button class="btn ghost sm" data-act="open-settings" style="margin-top:8px">Open Settings</button></div>
-      </section>
-    </div>`;
+    return `<p class="sub" style="margin:0 0 10px">Find books similar to one or more titles &mdash; in your library or not.</p>
+      <div class="empty-row">Connect TasteDive in Settings first.
+        <button class="btn ghost sm" data-act="open-settings" style="margin-top:8px">Open Settings</button></div>`;
   }
 
   let body;
   if(!seeds.length){
-    body=`<div class="empty-row">Add a title above, or add and rate a few favorites to get automatic picks.</div>`;
+    body=`<div class="empty-row">Add a title above, or start reading something to get an automatic pick.</div>`;
   } else {
     const cacheKey=discoverCacheKey(seeds);
     const seedLabel = seeds.length>1 ? seeds.length+' titles' : seeds[0];
@@ -467,29 +468,59 @@ function renderDiscoverPage(){
         </article>`).join('')}</div>`;
   }
 
+  return `<p class="sub" style="margin:0 0 10px">Find books similar to one or more titles &mdash; in your library or not.</p>
+    ${seekbar}
+    ${body}`;
+}
+// the Discovery page's "Add a book" tab: search Open Library, preview
+// (cover/synopsis/genres/series) before adding, or fall back to typing it
+// in by hand, pasting a list, or importing a file — every way of getting a
+// book into the library starts here now, not from a FAB-opened modal
+function renderDiscoverAddSection(){
+  return `<p class="sub" style="margin:0 0 10px">Search to see a book&rsquo;s cover, synopsis, genres &mdash; and its whole series, if it has one &mdash; before adding it.</p>
+    ${searchAssistHtml()}
+    <div class="btnrow" style="margin-top:4px">
+      <button class="btn ghost sm" data-act="manual-add-open">Add manually</button>
+      <button class="btn ghost sm" data-act="paste-list-open">Paste a list</button>
+      <button class="btn ghost sm" data-act="import-file-open">Import a file</button>
+    </div>`;
+}
+function renderDiscoverPage(){
+  const tabsHtml=`<div class="modtabs">
+    <button data-act="discoverpage-tab" data-tab="add" aria-pressed="${String(discoverPageTab==='add')}">Add a book</button>
+    <button data-act="discoverpage-tab" data-tab="similar" aria-pressed="${String(discoverPageTab==='similar')}">Find similar</button>
+  </div>`;
   return `<div class="dash">
     <section class="dash-section">
       <div class="sec-head"><h2>Discovery</h2></div>
-      <p class="sub" style="margin:0 0 10px">Find books similar to one or more titles &mdash; in your library or not.</p>
-      ${seekbar}
-      ${body}
+      ${tabsHtml}
+      ${discoverPageTab==='add' ? renderDiscoverAddSection() : renderDiscoverSimilarSection()}
     </section>
   </div>`;
 }
 
-// ---------- discovered-book preview modal (not in the library yet) ----------
-// an ephemeral, session-only cache — these aren't your books, so there's
-// nowhere in store.js to persist them; re-opened previews just re-fetch
+// ---------- book preview modal (not in the library yet) ----------
+// the one full-overview screen before adding any book that isn't already
+// yours — cover, synopsis, genres, and (when Open Library has it tagged)
+// a way to add its whole series instead of just this one. Used both for
+// TasteDive's "similar books" results and for Open Library search results
+// in the Discovery page's "Add a book" tab, so there's exactly one preview
+// experience regardless of how you got to a given title. An ephemeral,
+// session-only cache — these aren't your books, so there's nowhere in
+// store.js to persist them; re-opened previews just re-fetch.
 const discoverPreviewCache=new Map();
 let previewCtx=null;
 function discoverPreviewHtml(title,series,num,author,coverUrl){
   const key=(title||'').toLowerCase();
   const entry=discoverPreviewCache.get(key);
-  let body;
-  if(!entry || entry.status==='loading') body='<div class="empty-row">Looking up a synopsis…</div>';
-  else if(entry.status==='error') body=`<p class="sub" style="margin:0">${esc(entry.error)}</p>`;
-  else if(entry.status==='ok' && entry.text) body=`<p class="sub" style="margin:0;white-space:pre-wrap">${esc(entry.text)}</p>`;
-  else body='<p class="sub" style="margin:0">No synopsis found for this one on Open Library.</p>';
+  let synBody,genBody;
+  if(!entry || entry.status==='loading'){
+    synBody='<div class="empty-row">Looking up a synopsis…</div>';
+    genBody='<div class="empty-row">Looking up genres…</div>';
+  } else {
+    synBody = entry.text ? `<p class="sub" style="margin:0;white-space:pre-wrap">${esc(entry.text)}</p>` : '<p class="sub" style="margin:0">No synopsis found on Open Library.</p>';
+    genBody = (entry.genres&&entry.genres.length) ? '<div class="genre-tags">'+entry.genres.map(x=>`<span class="genre-tag">${esc(x)}</span>`).join('')+'</div>' : '<p class="sub" style="margin:0">No genres found on Open Library.</p>';
+  }
   return `<div class="detail-head">
       ${coverUrl?`<div class="bookcover size-lg realcover"><img class="bc-photo" src="${esc(coverUrl)}" alt="Cover of ${esc(title)}"></div>`:''}
       <div>
@@ -497,21 +528,29 @@ function discoverPreviewHtml(title,series,num,author,coverUrl){
         ${author||series?`<div class="detail-sub">${esc([author,series+(num?' #'+num:'')].filter(Boolean).join(' · '))}</div>`:''}
       </div>
     </div>
-    <div class="detail-section" style="margin-top:16px"><h4>Synopsis</h4>${body}</div>
+    <div class="detail-section" style="margin-top:16px"><h4>Synopsis</h4>${synBody}</div>
+    <div class="detail-section"><h4>Genres</h4>${genBody}</div>
     <div class="btnrow" style="margin-top:16px">
       <button class="btn ghost" data-act="close">Close</button>
-      <button class="btn primary" data-act="preview-add" data-title="${esc(title)}" data-series="${esc(series)}" data-num="${esc(num)}" data-author="${esc(author)}" data-cover="${esc(coverUrl)}">+ Add to library</button>
+      ${series?`<button class="btn ghost" data-act="preview-add-series" data-series="${esc(series)}">Add whole series&hellip;</button>`:''}
+      <button class="btn primary" data-act="preview-add" data-title="${esc(title)}" data-series="${esc(series)}" data-num="${esc(num)}" data-author="${esc(author)}" data-cover="${esc(coverUrl)}">+ Add book</button>
     </div>`;
 }
-function ensurePreviewSynopsis(title){
+// synopsis and genres are two independent Open Library lookups; allSettled
+// so one failing (or coming back empty) never blocks the other from showing
+function ensurePreviewInfo(title,author){
   const key=(title||'').toLowerCase();
   if(discoverPreviewCache.has(key)) return;
   discoverPreviewCache.set(key,{status:'loading'});
-  Discover.openLibrarySynopsis(title).then(text=>{
-    discoverPreviewCache.set(key,{status:'ok',text});
-    if(previewCtx && previewCtx.title===title) rerenderPreview();
-  }).catch(err=>{
-    discoverPreviewCache.set(key,{status:'error',error:(err&&err.message)||'Could not fetch a synopsis.'});
+  Promise.allSettled([
+    Discover.openLibrarySynopsis(title,author),
+    Discover.openLibrarySubjects(title,author)
+  ]).then(([synRes,genRes])=>{
+    discoverPreviewCache.set(key,{
+      status:'ok',
+      text: synRes.status==='fulfilled' ? synRes.value : '',
+      genres: genRes.status==='fulfilled' ? genRes.value : []
+    });
     if(previewCtx && previewCtx.title===title) rerenderPreview();
   });
 }
@@ -524,6 +563,7 @@ function openDiscoverPreview(title,series,num,author,coverUrl){
   showModal(discoverPreviewHtml(title,series,num,author,coverUrl),{
     onAction:(t)=>{
       if(t.dataset.act==='close'){ closeModal(); return; }
+      if(t.dataset.act==='preview-add-series'){ openAddSeriesModal(t.dataset.series); return; }
       if(t.dataset.act==='preview-add'){
         const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,author:t.dataset.author,status:'unread'});
         if(entry){
@@ -535,7 +575,7 @@ function openDiscoverPreview(title,series,num,author,coverUrl){
       }
     }
   });
-  ensurePreviewSynopsis(title);
+  ensurePreviewInfo(title,author);
 }
 
 function renderDashboard(){
@@ -1040,6 +1080,7 @@ function openDetail(id){
       else if(act==='discover-open'){
         const found=S.bookById(bid); if(!found) return;
         discoverSeeds=[S.displayTitle(found.b)];
+        discoverPageTab='similar';
         closeModal(); setView('discover');
       }
       else if(act==='next-on'){ S.toggleNext(bid); rerenderDetail(bid); }
@@ -1169,33 +1210,32 @@ function openRename(id){
   }});
 }
 
-// ================= ADD MODAL =================
-let addTab='quick';
-// last Open Library search results in the Add modal, and a cover URL staged
-// from picking one (applied to the book right after it's actually added,
-// since there's no book id to attach it to until then)
+// ================= DISCOVERY "ADD A BOOK" SEARCH ASSIST =================
+// last Open Library search results shown on the Discovery page's "Add a
+// book" tab. Picking a result opens the full preview (cover/synopsis/
+// genres/series) rather than autofilling a form — there's no "pending
+// cover" to stage anymore, the preview modal applies it directly on add.
 let addSearchResults=[];
-let pendingAddCover='';
 function addSearchResultsHtml(){
   if(!addSearchResults.length) return '';
   return '<div class="addsearch-results">'+addSearchResults.map((r,i)=>`
       <div class="addsearch-row">
-        <button type="button" class="addsearch-item" data-act="add-search-pick" data-idx="${i}">
+        <button type="button" class="addsearch-item" data-act="add-search-preview" data-idx="${i}">
           ${r.coverUrl?`<img src="${esc(r.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
           <span class="addsearch-meta"><b>${esc(r.title)}</b>${r.author?' &mdash; '+esc(r.author):''}${r.year?' ('+r.year+')':''}${r.series?`<br><i>${esc(r.series+(r.num?' #'+r.num:''))}</i>`:''}</span>
         </button>
         ${r.series?`<button type="button" class="btn ghost sm addseries-link" data-act="add-series-open" data-series="${esc(r.series)}">Add the whole "${esc(r.series)}" series&hellip;</button>`:''}
       </div>`).join('')+'</div>';
 }
-// its own tiny <form> (not nested in the add-book form) so Enter in the
-// search box searches instead of submitting the book — the modal's generic
-// submit listener already routes any <form data-act="..."> through here
-function searchAssistHtml(hint){
+// its own tiny <form> (not nested in anything else) so Enter in the search
+// box searches rather than triggering some other submit — handled by a
+// dedicated 'submit' listener on #view (this lives on the page now, not in
+// a modal, so the modal system's own submit routing doesn't cover it)
+function searchAssistHtml(){
   return `<form data-act="add-search" class="field">
-    <label>Search Open Library${hint?' &mdash; '+hint:''} (optional)</label>
     <div class="seekrow">
       <input type="text" name="q" placeholder="Search by title…" autocomplete="off">
-      <button type="submit" class="btn ghost sm">Search</button>
+      <button type="submit" class="btn primary">Search</button>
     </div>
     <div id="addSearchResults">${addSearchResultsHtml()}</div>
   </form>`;
@@ -1275,17 +1315,18 @@ function openAddSeriesModal(seriesName){
   });
 }
 
-function addModalHtml(){
+function seriesDatalistHtml(){
   const seriesNames=S.catalog.series.filter(x=>x.series!=='Standalone').map(x=>x.series);
-  const datalist=`<datalist id="seriesList">${seriesNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
-  const tabs=`<div class="modtabs">
-    <button data-act="add-tab" data-tab="quick" aria-pressed="${String(addTab==='quick')}">Quick add</button>
-    <button data-act="add-tab" data-tab="paste" aria-pressed="${String(addTab==='paste')}">Paste list</button>
-    <button data-act="add-tab" data-tab="import" aria-pressed="${String(addTab==='import')}">Import file</button>
-  </div>`;
-  let body='';
-  if(addTab==='quick'){
-    body=`${searchAssistHtml('autofills title, author &amp; cover')}
+  return `<datalist id="seriesList">${seriesNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+}
+// fallback paths off the Discovery page's "Add a book" tab, for when
+// searching isn't what you want: typing a book in by hand (Open Library
+// doesn't have everything), bulk-pasting a series list, or importing a
+// Goodreads/StoryGraph/exported file. Each is its own small modal now
+// rather than a tab inside one big Add modal, since there's no longer a
+// shared "Add" modal wrapping them.
+function openManualAddModal(){
+  showModal(`<h3>Add a book manually</h3>
     <form data-act="quick-submit">
       <div class="field"><label>Title</label><input name="title" required autofocus placeholder="The Name of the Wind"></div>
       <div class="row2">
@@ -1309,84 +1350,51 @@ function addModalHtml(){
       </div>
       <input type="hidden" name="fmt" value="book"><input type="hidden" name="status" value="unread">
       <div class="btnrow"><button type="button" class="btn ghost" data-act="close">Close</button><button type="submit" class="btn primary">Add book</button></div>
-    </form>${datalist}`;
-  } else if(addTab==='paste'){
-    body=`${searchAssistHtml('to find the exact series name')}
-    <form data-act="paste-submit">
-      <div class="field"><label>Series</label><input name="series" list="seriesList" placeholder="New or existing series name" required></div>
-      <div class="field"><label>One book per line</label>
-        <textarea name="text" rows="6" placeholder="1. First Book&#10;2. Second Book&#10;2.5. A Novella"></textarea></div>
-      <div class="btnrow"><button type="button" class="btn ghost" data-act="close">Close</button><button type="submit" class="btn primary">Add list</button></div>
-    </form>${datalist}`;
-  } else {
-    body=`<p class="sub">Bring in a Goodreads or StoryGraph CSV export, or a .txt list exported from this app. Existing books are skipped.</p>
-      <div class="btnrow"><button class="btn primary" data-act="import-choose">Choose file&hellip;</button></div>
-      <div class="btnrow"><button class="btn ghost" data-act="close">Close</button></div>`;
-  }
-  return `<h3>Add to your library</h3>${tabs}${body}`;
-}
-function openAddModal(){
-  addSearchResults=[]; pendingAddCover='';
-  showModal(addModalHtml(),{
+    </form>${seriesDatalistHtml()}`,{
     onAction:(t,e,m)=>{
       const act=t.dataset.act;
       if(act==='close'){ closeModal(); return; }
-      if(act==='add-tab'){ addTab=t.dataset.tab; addSearchResults=[]; pendingAddCover=''; openAddModal(); return; }
       if(act==='quick-fmt'){ setPressed(m,'[data-act="quick-fmt"]',t); m.querySelector('[name="fmt"]').value=t.dataset.fmt; return; }
       if(act==='quick-status'){ setPressed(m,'[data-act="quick-status"]',t); m.querySelector('[name="status"]').value=t.dataset.status; return; }
-      if(act==='add-search'){
-        const q=(t.q.value||'').trim();
-        const box=m.querySelector('#addSearchResults');
-        if(!q){ if(box) box.innerHTML=''; return; }
-        if(box) box.innerHTML='<div class="empty-row">Searching Open Library…</div>';
-        Discover.openLibrarySearch(q).then(results=>{
-          addSearchResults=results;
-          const liveBox=document.getElementById('addSearchResults');
-          if(liveBox) liveBox.innerHTML = results.length ? addSearchResultsHtml() : '<div class="empty-row">No matches.</div>';
-        }).catch(err=>{
-          const liveBox=document.getElementById('addSearchResults');
-          if(liveBox) liveBox.innerHTML=`<div class="empty-row">${esc((err&&err.message)||'Search failed.')}</div>`;
-        });
-        return;
-      }
-      if(act==='add-series-open'){ openAddSeriesModal(t.dataset.series); return; }
-      if(act==='add-search-pick'){
-        const r=addSearchResults[+t.dataset.idx]; if(!r) return;
-        const f=m.querySelector('form[data-act="quick-submit"], form[data-act="paste-submit"]');
-        if(f && f.dataset.act==='quick-submit'){
-          f.title.value=r.title;
-          if(r.series) f.series.value=r.series;
-          if(r.num) f.num.value=r.num;
-          if(r.author) f.author.value=r.author;
-          pendingAddCover=r.coverUrl||'';
-          f.title.focus();
-        } else if(f){
-          f.series.value=r.series||r.title;
-          f.series.focus();
-        }
-        const box=m.querySelector('#addSearchResults'); if(box) box.innerHTML='';
-        return;
-      }
       if(act==='quick-submit'){
         const f=t;
         const entry=S.addBook({series:f.series.value,num:f.num.value,title:f.title.value,author:f.author.value,fmt:f.fmt.value,status:f.status.value});
         if(entry){
-          if(pendingAddCover){ S.setCover(entry.id,pendingAddCover); pendingAddCover=''; }
           toast('Added “'+S.displayTitle(entry)+'” ✓'); refreshView();
           f.title.value=''; f.num.value=''; f.author.value=''; f.title.focus();
-          addSearchResults=[]; const box=m.querySelector('#addSearchResults'); if(box) box.innerHTML='';
         }
-        return;
       }
-      if(act==='paste-submit'){
+    }
+  });
+}
+function openPasteListModal(){
+  showModal(`<h3>Paste a list of books</h3>
+    <form data-act="paste-submit">
+      <div class="field"><label>Series</label><input name="series" list="seriesList" placeholder="New or existing series name" required autofocus></div>
+      <div class="field"><label>One book per line</label>
+        <textarea name="text" rows="6" placeholder="1. First Book&#10;2. Second Book&#10;2.5. A Novella"></textarea></div>
+      <div class="btnrow"><button type="button" class="btn ghost" data-act="close">Close</button><button type="submit" class="btn primary">Add list</button></div>
+    </form>${seriesDatalistHtml()}`,{
+    onAction:(t)=>{
+      if(t.dataset.act==='close'){ closeModal(); return; }
+      if(t.dataset.act==='paste-submit'){
         const f=t;
         const sn=f.series.value.trim(); if(!sn) return;
         if(!S.findSeries(sn)) S.addSeries(sn,'');
         const res=S.addList(sn,f.text.value);
         toast((res.added||0)+' book'+(res.added===1?'':'s')+' added.'); refreshView(); closeModal();
-        return;
       }
-      if(act==='import-choose'){ document.getElementById('impfile').click(); return; }
+    }
+  });
+}
+function openImportModal(){
+  showModal(`<h3>Import a file</h3>
+    <p class="sub">Bring in a Goodreads or StoryGraph CSV export, or a .txt list exported from this app. Existing books are skipped.</p>
+    <div class="btnrow"><button class="btn primary" data-act="import-choose">Choose file&hellip;</button></div>
+    <div class="btnrow"><button class="btn ghost" data-act="close">Close</button></div>`,{
+    onAction:(t)=>{
+      if(t.dataset.act==='close'){ closeModal(); return; }
+      if(t.dataset.act==='import-choose'){ document.getElementById('impfile').click(); }
     }
   });
 }
@@ -1436,7 +1444,7 @@ function openGoalModal(){
 }
 
 // ================= EVENT WIRING =================
-document.getElementById('btnAdd').addEventListener('click',openAddModal);
+document.getElementById('btnAdd').addEventListener('click',()=>{ discoverPageTab='add'; addSearchResults=[]; setView('discover'); });
 $all('.tab').forEach(t=>t.addEventListener('click',()=>setView(t.dataset.view)));
 document.getElementById('btnSettingsTop').addEventListener('click',()=>setView('settings'));
 document.getElementById('btnSearch').addEventListener('click',()=>{
@@ -1457,7 +1465,15 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='reminders-open') openReminders();
   else if(act==='goal-open') openGoalModal();
   else if(act==='open-settings') setView('settings');
-  else if(act==='open-discover') setView('discover');
+  else if(act==='open-discover'){ discoverPageTab='similar'; setView('discover'); }
+  else if(act==='discoverpage-tab'){ discoverPageTab=t.dataset.tab; refreshView(); }
+  else if(act==='manual-add-open') openManualAddModal();
+  else if(act==='paste-list-open') openPasteListModal();
+  else if(act==='import-file-open') openImportModal();
+  else if(act==='add-series-open') openAddSeriesModal(t.dataset.series);
+  else if(act==='add-search-preview'){
+    const r=addSearchResults[+t.dataset.idx]; if(r) openDiscoverPreview(r.title,r.series,r.num,r.author,r.coverUrl);
+  }
   else if(act==='discoverseed-add'){ const inp=document.getElementById('discoverSeedInput'); addDiscoverSeed(inp&&inp.value); }
   else if(act==='discoverseed-remove'){ removeDiscoverSeed(+t.dataset.idx); }
   else if(act==='discoverseeds-clear'){ discoverSeeds=[]; refreshView(); }
@@ -1516,6 +1532,25 @@ document.getElementById('view').addEventListener('keydown',e=>{
   if(e.key!=='Enter' && e.key!==' ') return;
   const t=e.target.closest('[data-act="pgcur-edit"]'); if(!t) return;
   e.preventDefault(); startPcurEdit(t,t.dataset.id);
+});
+// the only page-level <form> outside a modal — Discovery's "Add a book"
+// search box — so a single dedicated listener covers it rather than
+// building out the modal system's generic form-routing for one case
+document.getElementById('view').addEventListener('submit',e=>{
+  const t=e.target.closest('form'); if(!t || t.dataset.act!=='add-search') return;
+  e.preventDefault();
+  const q=(t.q.value||'').trim();
+  const box=document.getElementById('addSearchResults');
+  if(!q){ if(box) box.innerHTML=''; return; }
+  if(box) box.innerHTML='<div class="empty-row">Searching Open Library…</div>';
+  Discover.openLibrarySearch(q).then(results=>{
+    addSearchResults=results;
+    const liveBox=document.getElementById('addSearchResults');
+    if(liveBox) liveBox.innerHTML = results.length ? addSearchResultsHtml() : '<div class="empty-row">No matches.</div>';
+  }).catch(err=>{
+    const liveBox=document.getElementById('addSearchResults');
+    if(liveBox) liveBox.innerHTML=`<div class="empty-row">${esc((err&&err.message)||'Search failed.')}</div>`;
+  });
 });
 function startPcurEdit(span,id){
   const inp=document.createElement('input');
