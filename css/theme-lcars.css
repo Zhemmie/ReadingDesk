@@ -33,7 +33,16 @@
   --lc-violet:#cc99cc; --lc-blue:#9999cc; --lc-red:#cc6666;
 }
 
-:root[data-theme="lcars"] body{ background:#000; font-weight:500; }
+@keyframes lcarsBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+@keyframes lcarsGlow{ 0%,100%{ box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+  50%{ box-shadow:0 0 0 5px color-mix(in srgb, var(--accent) 55%, transparent); } }
+
+:root[data-theme="lcars"] body{
+  background:
+    repeating-linear-gradient(rgba(255,255,255,.015) 0 1px, transparent 1px 3px),
+    #000;
+  font-weight:500;
+}
 :root[data-theme="lcars"] h1,
 :root[data-theme="lcars"] h2,
 :root[data-theme="lcars"] h3,
@@ -53,7 +62,9 @@
   background:var(--bg); border-bottom:3px solid var(--accent); padding-left:10px;
 }
 :root[data-theme="lcars"] .brand{ letter-spacing:.06em; }
-:root[data-theme="lcars"] .brand-mark{ border-radius:3px; width:14px; height:14px; box-shadow:none; }
+:root[data-theme="lcars"] .brand-mark{ border-radius:3px; width:14px; height:14px; box-shadow:none; animation:lcarsBlink 2.4s ease-in-out infinite; }
+:root[data-theme="lcars"] .fab{ animation:lcarsGlow 2.6s ease-in-out infinite; }
+:root[data-theme="lcars"] .flame.lit{ filter:drop-shadow(0 0 4px rgba(255,204,102,.8)); }
 
 :root[data-theme="lcars"] .dash-hero{
   background:var(--bg-card); border:none; border-radius:0 40px 40px 0; border-left:14px solid var(--accent);
@@ -63,10 +74,16 @@
 
 :root[data-theme="lcars"] .sec-head{
   background:var(--chip-bg); border-radius:0 18px 18px 0; border-left:10px solid var(--lc-violet);
-  padding:7px 12px; margin-bottom:12px;
+  padding:7px 12px; margin-bottom:12px; position:relative;
 }
 :root[data-theme="lcars"] .sec-head h2{ color:var(--lc-violet); font-weight:700; }
 :root[data-theme="lcars"] .sec-head:nth-of-type(odd){ border-left-color:var(--accent); }
+:root[data-theme="lcars"] .sec-head::after{
+  content:""; position:absolute; right:12px; top:50%; translate:0 -50%; width:6px; height:6px; border-radius:50%;
+  background:var(--accent); animation:lcarsBlink 1.6s ease-in-out infinite;
+}
+:root[data-theme="lcars"] h3,
+:root[data-theme="lcars"] .fmeta h3{ text-shadow:0 0 10px color-mix(in srgb, var(--accent) 30%, transparent); }
 
 :root[data-theme="lcars"] .chipcard,
 :root[data-theme="lcars"] .singlecard{
@@ -97,6 +114,10 @@
 
 :root[data-theme="lcars"] .btn{ border-radius:99px; text-transform:uppercase; letter-spacing:.03em; }
 :root[data-theme="lcars"] .btn.ghost{ border:2px solid var(--border); }
+:root[data-theme="lcars"] .btn.primary:hover,
+:root[data-theme="lcars"] .donebtn:hover,
+:root[data-theme="lcars"] .chips button[aria-pressed="true"]:hover{ filter:brightness(1.15); box-shadow:0 0 14px color-mix(in srgb, var(--accent) 50%, transparent); }
+:root[data-theme="lcars"] .statuspill[aria-pressed="true"]{ box-shadow:0 0 12px color-mix(in srgb, currentColor 40%, transparent); }
 
 :root[data-theme="lcars"] .tabbar{ background:var(--tab-bg); border-top:3px solid var(--accent); }
 :root[data-theme="lcars"] .tab-lbl{ text-transform:uppercase; letter-spacing:.03em; }
@@ -110,8 +131,15 @@
 :root[data-theme="lcars"] .setgroup{ border:none; border-radius:0 18px 18px 0; border-left:8px solid var(--lc-violet); }
 
 /* decorative corner block, pure CSS, evokes the LCARS "cap" without extra markup */
+@keyframes lcarsSweep{ 0%{ background-position:-120% 0; } 100%{ background-position:220% 0; } }
 :root[data-theme="lcars"] .app::before{
-  content:""; display:block; height:18px; margin:0 16px; margin-top:8px;
+  content:""; display:block; height:18px; margin:0 16px; margin-top:8px; position:relative; overflow:hidden;
   background:linear-gradient(90deg, var(--accent) 0 18%, var(--lc-violet) 18% 36%, var(--lc-blue) 36% 54%, transparent 54%);
+  border-radius:12px 0 0 0;
+}
+:root[data-theme="lcars"] .app::after{
+  content:""; position:absolute; top:8px; left:16px; right:16px; height:18px; pointer-events:none;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+  background-size:40% 100%; background-repeat:no-repeat; animation:lcarsSweep 5s linear infinite;
   border-radius:12px 0 0 0;
 }

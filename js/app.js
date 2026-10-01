@@ -224,6 +224,7 @@ function renderDashboard(){
   const streak=S.currentStreak();
   const due=S.dueReminders();
 
+  const flameHtml=`<span class="flame${streak>0?' lit':''}" aria-hidden="true">&#128293;</span>`;
   let ring='';
   if(goal){
     const pct=Math.min(1, doneThisYear/goal.target);
@@ -232,10 +233,10 @@ function renderDashboard(){
       <circle class="fill" cx="38" cy="38" r="${r}" style="stroke-dasharray:${c};stroke-dashoffset:${c*(1-pct)}"></circle></svg>
       <div class="ring-num">${doneThisYear}</div></div>
       <div><div class="hero-goal-lbl">${doneThisYear} of ${goal.target} books in ${year}</div>
-      <div class="hero-streak"><span aria-hidden="true">&#128293;</span> <b>${streak}</b> day streak</div></div>`;
+      <div class="hero-streak">${flameHtml} <b>${streak}</b> day streak</div></div>`;
   } else {
     ring=`<button class="btn ghost sm" data-act="goal-open">Set a ${year} goal</button>
-      <div class="hero-streak"><span aria-hidden="true">&#128293;</span> <b>${streak}</b> day streak</div>`;
+      <div class="hero-streak">${flameHtml} <b>${streak}</b> day streak</div>`;
   }
 
   const dueBanner = due.length ? `<section class="dash-due">
@@ -268,12 +269,16 @@ function renderDashboard(){
             ${pct!=null?`<div class="bar"><i style="width:${pct}%"></i></div>`:''}
             <div class="flbl">
               <span>${d.started?'Started '+esc(S.fmtDate(d.started)):'In progress'}</span>
-              <span>${d.ptot? (d.pcur||0)+' / '+d.ptot+(d.fmt==='audio'?' ch':' p') : 'No page count set'}</span>
+              <span>${d.fmt==='audio'?'ch.':'p.'} <span class="pgcur" data-act="pgcur-edit" data-id="${id}" tabindex="0" role="button" title="Tap to type an exact ${d.fmt==='audio'?'chapter':'page'}">${d.pcur||0}</span> of ${d.ptot||'&mdash;'}</span>
             </div>
           </div>
           <div class="factions">
-            <button class="stepbtn" data-act="step" data-id="${id}" data-delta="-10">&minus;10</button>
-            <button class="stepbtn" data-act="step" data-id="${id}" data-delta="10">+10</button>
+            <div class="stepgroup">
+              <button class="stepbtn" data-act="step" data-id="${id}" data-delta="-10">&minus;10</button>
+              <button class="stepbtn" data-act="step" data-id="${id}" data-delta="-1">&minus;1</button>
+              <button class="stepbtn" data-act="step" data-id="${id}" data-delta="1">+1</button>
+              <button class="stepbtn" data-act="step" data-id="${id}" data-delta="10">+10</button>
+            </div>
             <button class="btn ghost sm" data-act="open" data-id="${id}">Details</button>
             <button class="donebtn" data-act="finish" data-id="${id}">Finished &#10003;</button>
           </div>
@@ -884,6 +889,7 @@ document.getElementById('view').addEventListener('click',e=>{
   if(act==='open') openDetail(id);
   else if(act==='step'){ const d=S.det(id); const next=Math.max(0,(d.pcur||0)+(+t.dataset.delta)); S.setPages(id,'pcur',next); refreshView(); }
   else if(act==='finish'){ S.markRead(id); refreshView(); toast('Marked finished ✓'); }
+  else if(act==='pgcur-edit'){ startPcurEdit(t,id); }
   else if(act==='reminders-open') openReminders();
   else if(act==='goal-open') openGoalModal();
   else if(act==='filter'){ statusFilter=t.dataset.filter; refreshView(); }
@@ -916,6 +922,22 @@ document.getElementById('view').addEventListener('change',e=>{
   else if(t.dataset.act==='rating-filter'){ ratingFilter=t.value; refreshView(); }
   else if(t.dataset.act==='devname-input'){ Sync.setDevName(t.value); }
 });
+document.getElementById('view').addEventListener('keydown',e=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const t=e.target.closest('[data-act="pgcur-edit"]'); if(!t) return;
+  e.preventDefault(); startPcurEdit(t,t.dataset.id);
+});
+function startPcurEdit(span,id){
+  const inp=document.createElement('input');
+  inp.type='number'; inp.inputMode='numeric'; inp.min='0'; inp.className='pgcur-input';
+  inp.value=S.det(id).pcur||''; inp.setAttribute('aria-label','Set exact progress');
+  span.replaceWith(inp); inp.focus(); inp.select();
+  let done=false;
+  const commit=()=>{ if(done) return; done=true; S.setPages(id,'pcur',inp.value); refreshView(); };
+  const cancel=()=>{ if(done) return; done=true; refreshView(); };
+  inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); commit(); } else if(ev.key==='Escape'){ ev.preventDefault(); cancel(); } });
+  inp.addEventListener('blur',commit);
+}
 
 document.getElementById('file').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return; const fr=new FileReader();
