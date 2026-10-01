@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v71';
+const APP_VERSION='v72';
 
 S.load();
 
@@ -536,21 +536,28 @@ function discoverPreviewHtml(title,series,num,author,coverUrl){
       <button class="btn primary" data-act="preview-add" data-title="${esc(title)}" data-series="${esc(series)}" data-num="${esc(num)}" data-author="${esc(author)}" data-cover="${esc(coverUrl)}">+ Add book</button>
     </div>`;
 }
-// synopsis and genres are two independent Open Library lookups; allSettled
-// so one failing (or coming back empty) never blocks the other from showing
+// synopsis, genres, and (only when neither Open Library nor Google Books
+// already found one) a Wikidata series check — all independent lookups,
+// allSettled so one failing or coming back empty never blocks the others
 function ensurePreviewInfo(title,author){
   const key=(title||'').toLowerCase();
   if(discoverPreviewCache.has(key)) return;
   discoverPreviewCache.set(key,{status:'loading'});
+  const needsSeries = previewCtx && previewCtx.title===title && !previewCtx.series;
   Promise.allSettled([
     Discover.openLibrarySynopsis(title,author),
-    Discover.openLibrarySubjects(title,author)
-  ]).then(([synRes,genRes])=>{
+    Discover.openLibrarySubjects(title,author),
+    needsSeries ? Discover.wikidataSeriesFor(title) : Promise.resolve(null)
+  ]).then(([synRes,genRes,serRes])=>{
     discoverPreviewCache.set(key,{
       status:'ok',
       text: synRes.status==='fulfilled' ? synRes.value : '',
       genres: genRes.status==='fulfilled' ? genRes.value : []
     });
+    if(serRes.status==='fulfilled' && serRes.value && serRes.value.series && previewCtx && previewCtx.title===title){
+      previewCtx.series=serRes.value.series;
+      if(!previewCtx.num) previewCtx.num=serRes.value.num;
+    }
     if(previewCtx && previewCtx.title===title) rerenderPreview();
   });
 }
@@ -1318,17 +1325,35 @@ function openAddSeriesModal(seriesName){
       }
     }
   });
-  Discover.openLibrarySeries(seriesName).then(vols=>{
+  // Open Library's text search and Wikidata's structured "part of series"
+  // data each catch books the other misses — merge both rather than
+  // picking one, deduping by title (Open Library's copy wins on a title
+  // both have, since it usually carries a cover and Wikidata never does)
+  Promise.allSettled([
+    Discover.openLibrarySeries(seriesName),
+    Discover.wikidataSeriesVolumes(seriesName)
+  ]).then(([olRes,wdRes])=>{
+    const olVols=olRes.status==='fulfilled' ? olRes.value : [];
+    const wdVols=wdRes.status==='fulfilled' ? wdRes.value : [];
+    if(olRes.status==='rejected' && wdRes.status==='rejected'){
+      addSeriesStatus='error';
+      addSeriesError=(olRes.reason&&olRes.reason.message)||'Could not fetch the series.';
+      rerenderAddSeriesModal();
+      return;
+    }
+    const seen=new Set(), merged=[];
+    [...olVols,...wdVols].forEach(v=>{
+      const key=v.title.toLowerCase(); if(seen.has(key)) return; seen.add(key);
+      merged.push(v);
+    });
+    merged.sort((a,b)=>(parseFloat(a.num)||999)-(parseFloat(b.num)||999));
     // every volume is kept and shown, checked by default — "owned" is just
     // a label on rows that match a title already in the library, not a
     // reason to exclude or pre-uncheck them
     const existingTitles=new Set(S.allBooks().map(x=>S.displayTitle(x.b).toLowerCase()));
-    addSeriesVolumes=vols.map(v=>({...v, owned:existingTitles.has(v.title.toLowerCase())}));
+    addSeriesVolumes=merged.map(v=>({...v, owned:existingTitles.has(v.title.toLowerCase())}));
     addSeriesStatus='ok';
     addSeriesChecked=new Set(addSeriesVolumes.map((_,i)=>i));
-    rerenderAddSeriesModal();
-  }).catch(err=>{
-    addSeriesStatus='error'; addSeriesError=(err&&err.message)||'Could not fetch the series.';
     rerenderAddSeriesModal();
   });
 }
