@@ -60,6 +60,32 @@ export async function tasteDiveSimilar(seedTitle,key,limit,proxyUrl){
   return results.map(r=>cleanTitle(r.name)).filter(r=>r.title);
 }
 
+// returns up to `limit` {title,series,num,author,year,coverUrl} candidates for
+// a title search — used to autofill the add-book form instead of typing
+// everything by hand. coverUrl points straight at Open Library's cover
+// service (no fetching/re-encoding needed — an <img src> doesn't need CORS,
+// only reading the bytes back out in JS would)
+export async function openLibrarySearch(query,limit){
+  limit=limit||8;
+  const q=String(query||'').trim();
+  if(!q) return [];
+  const params=new URLSearchParams({q, fields:'title,author_name,first_publish_year,cover_i', limit:String(limit)});
+  const url='https://openlibrary.org/search.json?'+params.toString();
+  const json=await fetchJson(url);
+  const docs=json && Array.isArray(json.docs) ? json.docs : [];
+  return docs.map(d=>{
+    const parsed=cleanTitle(d.title);
+    return {
+      title: parsed.title || String(d.title||'').trim(),
+      series: parsed.series,
+      num: parsed.num,
+      author: Array.isArray(d.author_name) ? d.author_name[0] : '',
+      year: d.first_publish_year || '',
+      coverUrl: d.cover_i ? ('https://covers.openlibrary.org/b/id/'+d.cover_i+'-M.jpg') : ''
+    };
+  }).filter(r=>r.title);
+}
+
 // returns a synopsis string (possibly '' if nothing was found). Open Library's
 // search results don't carry the full description, only a work "key" — so
 // this is two requests: find the work, then fetch its full record. Falls

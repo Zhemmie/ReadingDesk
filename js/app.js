@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v63';
+const APP_VERSION='v64';
 
 S.load();
 
@@ -875,6 +875,15 @@ function detailHtml(id){
       </div>
     </div>
 
+    <div class="detail-section">
+      <section class="collapse" data-open="${!synopsisCollapsed.has(id)}">
+        <button type="button" class="collapse-head" data-act="synopsis-toggle" data-id="${id}">
+          <span>Synopsis</span><span class="series-caret" aria-hidden="true">&#8250;</span>
+        </button>
+        <div class="collapse-body">${synopsisHtml(id)}</div>
+      </section>
+    </div>
+
     <div class="statusrow" role="group" aria-label="Status">
       ${S.ORDER.map(k=>`<button class="statuspill" data-st="${k}" data-act="status-set" data-id="${id}" aria-pressed="${String(st===k)}">${S.ST_LABEL[k]}</button>`).join('')}
     </div>
@@ -935,15 +944,6 @@ function detailHtml(id){
     </div>
 
     <div class="detail-section">
-      <section class="collapse" data-open="${synopsisOpen.has(id)}">
-        <button type="button" class="collapse-head" data-act="synopsis-toggle" data-id="${id}">
-          <span>Synopsis</span><span class="series-caret" aria-hidden="true">&#8250;</span>
-        </button>
-        <div class="collapse-body">${synopsisHtml(id)}</div>
-      </section>
-    </div>
-
-    <div class="detail-section">
       <h4>Reminders</h4>
       ${remindersHtml}
       <form data-act="reminder-save" data-id="${id}" class="field" style="margin-top:8px">
@@ -993,8 +993,7 @@ function openDetail(id){
       else if(act==='genres-fetch'||act==='genres-refetch'){ fetchGenres(bid); }
       else if(act==='synopsis-fetch'||act==='synopsis-refetch'){ fetchSynopsis(bid); }
       else if(act==='synopsis-toggle'){
-        if(synopsisOpen.has(bid)) synopsisOpen.delete(bid);
-        else { synopsisOpen.add(bid); if(S.synopsisFor(bid)==null) fetchSynopsis(bid); }
+        if(synopsisCollapsed.has(bid)) synopsisCollapsed.delete(bid); else synopsisCollapsed.add(bid);
         rerenderDetail(bid);
       }
       else if(act==='discover-open'){
@@ -1023,6 +1022,7 @@ function openDetail(id){
     }
   });
   currentDetailId=id;
+  if(S.synopsisFor(id)==null) fetchSynopsis(id);
 }
 let currentDetailId=null;
 function rerenderDetail(id){ if(!modalCtx) return;
@@ -1074,11 +1074,14 @@ function fetchGenres(id){
   });
 }
 
-// the Synopsis section's open/closed state is session-only UI state, same as
-// openSeries for the Library accordion — opening it for the first time
-// auto-fetches, matching the "collapsible" ask without a separate button
+// the Synopsis section reads like a book's back cover: open by default and
+// fetched automatically the moment a book's detail is opened (see
+// openDetail), not gated behind a click. synopsisCollapsed tracks only the
+// ids a user has explicitly collapsed this session — same session-only
+// pattern as openSeries for the Library accordion, just inverted (default
+// shown, not default hidden)
 const synopsisLoading=new Set();
-const synopsisOpen=new Set();
+const synopsisCollapsed=new Set();
 function synopsisHtml(id){
   if(synopsisLoading.has(id)) return '<div class="empty-row">Looking up a synopsis…</div>';
   const text=S.synopsisFor(id);
@@ -1127,6 +1130,32 @@ function openRename(id){
 
 // ================= ADD MODAL =================
 let addTab='quick';
+// last Open Library search results in the Add modal, and a cover URL staged
+// from picking one (applied to the book right after it's actually added,
+// since there's no book id to attach it to until then)
+let addSearchResults=[];
+let pendingAddCover='';
+function addSearchResultsHtml(){
+  if(!addSearchResults.length) return '';
+  return '<div class="addsearch-results">'+addSearchResults.map((r,i)=>`
+      <button type="button" class="addsearch-item" data-act="add-search-pick" data-idx="${i}">
+        ${r.coverUrl?`<img src="${esc(r.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
+        <span class="addsearch-meta"><b>${esc(r.title)}</b>${r.author?' &mdash; '+esc(r.author):''}${r.year?' ('+r.year+')':''}${r.series?`<br><i>${esc(r.series+(r.num?' #'+r.num:''))}</i>`:''}</span>
+      </button>`).join('')+'</div>';
+}
+// its own tiny <form> (not nested in the add-book form) so Enter in the
+// search box searches instead of submitting the book — the modal's generic
+// submit listener already routes any <form data-act="..."> through here
+function searchAssistHtml(hint){
+  return `<form data-act="add-search" class="field">
+    <label>Search Open Library${hint?' &mdash; '+hint:''} (optional)</label>
+    <div class="seekrow">
+      <input type="text" name="q" placeholder="Search by title…" autocomplete="off">
+      <button type="submit" class="btn ghost sm">Search</button>
+    </div>
+    <div id="addSearchResults">${addSearchResultsHtml()}</div>
+  </form>`;
+}
 function addModalHtml(){
   const seriesNames=S.catalog.series.filter(x=>x.series!=='Standalone').map(x=>x.series);
   const datalist=`<datalist id="seriesList">${seriesNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
@@ -1137,7 +1166,8 @@ function addModalHtml(){
   </div>`;
   let body='';
   if(addTab==='quick'){
-    body=`<form data-act="quick-submit">
+    body=`${searchAssistHtml('autofills title, author &amp; cover')}
+    <form data-act="quick-submit">
       <div class="field"><label>Title</label><input name="title" required autofocus placeholder="The Name of the Wind"></div>
       <div class="row2">
         <div class="field"><label>Series (optional)</label><input name="series" list="seriesList" placeholder="Leave blank for a standalone"></div>
@@ -1162,7 +1192,8 @@ function addModalHtml(){
       <div class="btnrow"><button type="button" class="btn ghost" data-act="close">Close</button><button type="submit" class="btn primary">Add book</button></div>
     </form>${datalist}`;
   } else if(addTab==='paste'){
-    body=`<form data-act="paste-submit">
+    body=`${searchAssistHtml('to find the exact series name')}
+    <form data-act="paste-submit">
       <div class="field"><label>Series</label><input name="series" list="seriesList" placeholder="New or existing series name" required></div>
       <div class="field"><label>One book per line</label>
         <textarea name="text" rows="6" placeholder="1. First Book&#10;2. Second Book&#10;2.5. A Novella"></textarea></div>
@@ -1176,22 +1207,59 @@ function addModalHtml(){
   return `<h3>Add to your library</h3>${tabs}${body}`;
 }
 function openAddModal(){
+  addSearchResults=[]; pendingAddCover='';
   showModal(addModalHtml(),{
     onAction:(t,e,m)=>{
       const act=t.dataset.act;
       if(act==='close'){ closeModal(); return; }
-      if(act==='add-tab'){ addTab=t.dataset.tab; openAddModal(); return; }
+      if(act==='add-tab'){ addTab=t.dataset.tab; addSearchResults=[]; pendingAddCover=''; openAddModal(); return; }
       if(act==='quick-fmt'){ setPressed(m,'[data-act="quick-fmt"]',t); m.querySelector('[name="fmt"]').value=t.dataset.fmt; return; }
       if(act==='quick-status'){ setPressed(m,'[data-act="quick-status"]',t); m.querySelector('[name="status"]').value=t.dataset.status; return; }
+      if(act==='add-search'){
+        const q=(t.q.value||'').trim();
+        const box=m.querySelector('#addSearchResults');
+        if(!q){ if(box) box.innerHTML=''; return; }
+        if(box) box.innerHTML='<div class="empty-row">Searching Open Library…</div>';
+        Discover.openLibrarySearch(q).then(results=>{
+          addSearchResults=results;
+          const liveBox=document.getElementById('addSearchResults');
+          if(liveBox) liveBox.innerHTML = results.length ? addSearchResultsHtml() : '<div class="empty-row">No matches.</div>';
+        }).catch(err=>{
+          const liveBox=document.getElementById('addSearchResults');
+          if(liveBox) liveBox.innerHTML=`<div class="empty-row">${esc((err&&err.message)||'Search failed.')}</div>`;
+        });
+        return;
+      }
+      if(act==='add-search-pick'){
+        const r=addSearchResults[+t.dataset.idx]; if(!r) return;
+        const f=m.querySelector('form[data-act="quick-submit"], form[data-act="paste-submit"]');
+        if(f && f.dataset.act==='quick-submit'){
+          f.title.value=r.title;
+          if(r.series) f.series.value=r.series;
+          if(r.num) f.num.value=r.num;
+          if(r.author) f.author.value=r.author;
+          pendingAddCover=r.coverUrl||'';
+          f.title.focus();
+        } else if(f){
+          f.series.value=r.series||r.title;
+          f.series.focus();
+        }
+        const box=m.querySelector('#addSearchResults'); if(box) box.innerHTML='';
+        return;
+      }
       if(act==='quick-submit'){
-        const f=m.querySelector('form');
+        const f=t;
         const entry=S.addBook({series:f.series.value,num:f.num.value,title:f.title.value,author:f.author.value,fmt:f.fmt.value,status:f.status.value});
-        if(entry){ toast('Added “'+S.displayTitle(entry)+'” ✓'); refreshView();
-          f.title.value=''; f.num.value=''; f.author.value=''; f.title.focus(); }
+        if(entry){
+          if(pendingAddCover){ S.setCover(entry.id,pendingAddCover); pendingAddCover=''; }
+          toast('Added “'+S.displayTitle(entry)+'” ✓'); refreshView();
+          f.title.value=''; f.num.value=''; f.author.value=''; f.title.focus();
+          addSearchResults=[]; const box=m.querySelector('#addSearchResults'); if(box) box.innerHTML='';
+        }
         return;
       }
       if(act==='paste-submit'){
-        const f=m.querySelector('form');
+        const f=t;
         const sn=f.series.value.trim(); if(!sn) return;
         if(!S.findSeries(sn)) S.addSeries(sn,'');
         const res=S.addList(sn,f.text.value);
