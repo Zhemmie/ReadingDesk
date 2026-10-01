@@ -68,12 +68,19 @@
 :root[data-theme="lcars"] .sec-head h2{ color:var(--lc-violet); font-weight:700; }
 :root[data-theme="lcars"] .sec-head:nth-of-type(odd){ border-left-color:var(--accent); }
 
-:root[data-theme="lcars"] .rcard,
 :root[data-theme="lcars"] .chipcard,
 :root[data-theme="lcars"] .singlecard{
   border:none; border-top:3px solid var(--accent); background:var(--bg-card); border-radius:4px 14px 4px 4px;
 }
-:root[data-theme="lcars"] .cover{ border-radius:3px; font-family:var(--font-head); font-weight:700; }
+:root[data-theme="lcars"] .featured{
+  background:var(--bg-card); border:none; border-radius:0 40px 40px 0; border-left:14px solid var(--accent);
+  padding-left:22px;
+}
+:root[data-theme="lcars"] .flap{ background:var(--bg); color:var(--accent); border:2px solid var(--accent); }
+:root[data-theme="lcars"] .bookcover{ border-radius:3px; box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 10px 22px -14px rgba(0,0,0,.7); }
+:root[data-theme="lcars"] .bc-title{ text-transform:uppercase; letter-spacing:.02em; }
+:root[data-theme="lcars"] .bc-frame{ border-radius:0; }
+:root[data-theme="lcars"] .flap{ border-radius:3px; letter-spacing:.14em; }
 
 :root[data-theme="lcars"] .series-group{ border:none; border-radius:0 20px 20px 0; border-left:8px solid var(--lc-blue); }
 :root[data-theme="lcars"] .series-group:nth-of-type(3n+2){ border-left-color:var(--accent); }

@@ -6,6 +6,7 @@
 // every change is cheap and keeps this file easy to follow.
 import * as S from './store.js';
 import * as Sync from './sync.js';
+import * as Covers from './covers.js';
 
 S.load();
 
@@ -15,8 +16,6 @@ function $(sel,root){ return (root||document).querySelector(sel); }
 function $all(sel,root){ return Array.from((root||document).querySelectorAll(sel)); }
 
 // ---------- theme ----------
-const LIB_COLORS=['#7a3b2e','#5c4b2a','#3f5a3f','#2f4a52','#4a3b5c','#6b4423','#5c2f3a','#3a4a5c','#7a5a2a','#2f5c4a','#5c3a2f','#3a5c5c','#6b3a5c','#4a5c2f','#5c4a3a'];
-const LCARS_COLORS=['#ff9966','#cc99cc','#9999cc','#ffcc66','#99cc99','#cc6666','#ff99cc','#66cccc','#cccc66','#9999ff','#ffb399','#66ccff','#cc99ff','#99ffcc','#ffe066'];
 function getTheme(){ const t=localStorage.getItem(S.K_THEME); return t==='lcars'?'lcars':'library'; }
 function setTheme(t){ t=t==='lcars'?'lcars':'library'; try{localStorage.setItem(S.K_THEME,t);}catch(e){}
   document.documentElement.setAttribute('data-theme',t);
@@ -24,11 +23,125 @@ function setTheme(t){ t=t==='lcars'?'lcars':'library'; try{localStorage.setItem(
   refreshView(); }
 document.documentElement.setAttribute('data-theme',getTheme());
 document.querySelector('meta[name="theme-color"]').setAttribute('content', getTheme()==='lcars'?'#000000':'#f5ead6');
+function isLcarsTheme(){ return getTheme()==='lcars'; }
 
-function coverColor(seed){ const pal = getTheme()==='lcars'?LCARS_COLORS:LIB_COLORS; return pal[S.hashStr(seed)%pal.length]; }
-function coverLetter(title){ const t=(title||'').trim(); return t?t.charAt(0).toUpperCase():'?'; }
-function coverStyleAttr(id,title){ const d=S.det(id); const c=d.color||coverColor(id); return ' style="--c:'+c+'"'; }
-function coverHtml(id,title,size){ return '<div class="cover"'+coverStyleAttr(id,title)+'>'+esc(coverLetter(title))+'</div>'; }
+// ---------- procedural cover-art engine ----------
+// Ported from the single-file app: every book gets a deterministic "cover" —
+// a family color (by series), a per-book shade variant, an ornament glyph,
+// a scattering of translucent shapes, and (at large size) a framed title/
+// author. Library reuses the old warm-cloth palette; LCARS reuses the old
+// night-mode neon palette (dark=hot/saturated, light=dim/quiet) almost
+// verbatim, since it already reads as a "console readout" aesthetic.
+const FAMILIES=[
+  {dark:'#5a2321',light:'#c7a199'},{dark:'#234a2f',light:'#a6c1a8'},{dark:'#22314f',light:'#a3b1cb'},
+  {dark:'#1f4a48',light:'#a1c2bf'},{dark:'#6a5212',light:'#d8c78c'},{dark:'#3f2340',light:'#bda3bd'},
+  {dark:'#4a1f2b',light:'#c39aa4'},{dark:'#6b4a1c',light:'#d5bd93'},{dark:'#33384a',light:'#b1b6c4'},
+  {dark:'#2f2140',light:'#b0a3c4'},{dark:'#6b3320',light:'#d3a893'},{dark:'#3b4a34',light:'#b6c2a7'},
+  {dark:'#26333a',light:'#a7b6bd'},{dark:'#43291d',light:'#c6ab97'},{dark:'#242530',light:'#b7bac6'}];
+const ACCENTS=['#8a3b2f','#4d6b3c','#2e3b57','#b0841a','#5a2f45','#26414a','#7a3320','#3f5148'];
+const ORN=['❦','❧','✦','◆','⁂','❈','✣','☙'];
+const NIGHT_FAMILIES=[
+  {dark:'#17e0ff',light:'#0a6b78'},{dark:'#ff2bd6',light:'#7a1a68'},{dark:'#a742ff',light:'#55208a'},
+  {dark:'#33ff9c',light:'#157a4c'},{dark:'#ffb02e',light:'#8a5c12'},{dark:'#ff3b5c',light:'#85172c'},
+  {dark:'#2b6bff',light:'#163a85'},{dark:'#ff5cc9',light:'#852966'},{dark:'#1ee0b8',light:'#0d6f5a'},
+  {dark:'#c8ff2e',light:'#647d14'},{dark:'#6b5bff',light:'#362c85'},{dark:'#4fd8ff',light:'#256b85'},
+  {dark:'#ff5b9c',light:'#85304f'},{dark:'#58ffcf',light:'#2c8567'},{dark:'#ffe14f',light:'#857517'}];
+const NIGHT_ACCENTS=['#2de7ff','#ff2bd6','#a742ff','#33ff9c','#ffb02e','#ff3b5c','#4fd8ff','#c8ff2e'];
+const NIGHT_ORN=['◈','◆','▲','⬡','✦','◇','◉','⌘'];
+
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function hexToHsl(hex){ let r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let h,s,l=(mx+mn)/2;
+  if(mx===mn){ h=0;s=0; } else { const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    h = mx===r ? (g-b)/d+(g<b?6:0) : mx===g ? (b-r)/d+2 : (r-g)/d+4; h*=60; }
+  return {h, s:s*100, l:l*100}; }
+function hslToHex(h,s,l){ s/=100; l/=100; const k=n=>(n+h/30)%12; const a=s*Math.min(l,1-l);
+  const f=n=>{ const c=l-a*Math.max(-1,Math.min(k(n)-3, Math.min(9-k(n),1))); return Math.round(255*c); };
+  const to=x=>x.toString(16).padStart(2,'0'); return '#'+to(f(0))+to(f(8))+to(f(4)); }
+
+// seed key: series name for series books, the book's own title for standalones
+function seedOf(seriesName,title,standalone){ return standalone ? title : seriesName; }
+function famFor(seed){ const list=isLcarsTheme()?NIGHT_FAMILIES:FAMILIES; return list[S.hashStr(seed)%list.length]; }
+function isLightSeed(seed){ return (S.hashStr(seed+'lite')%100)<26; }
+function seriesBase(seed){ return isLightSeed(seed)?famFor(seed).light:famFor(seed).dark; }
+function hasBand(seed){ return (S.hashStr(seed+'band')%100)<64; }
+function bandIsFoil(seed){ return (S.hashStr(seed+'bandfoil')%2)===0; }
+function isFoilTitle(seed){ return (S.hashStr(seed+'foil')%100)<55; }
+function ornFor(seed){ const list=isLcarsTheme()?NIGHT_ORN:ORN; return list[S.hashStr(seed+'orn')%list.length]; }
+function accentFor(author,seed){ const list=isLcarsTheme()?NIGHT_ACCENTS:ACCENTS; return list[S.hashStr((author||seed)+'acc')%list.length]; }
+function foilColor(){ return isLcarsTheme()?'#ffcc66':'#c9a227'; }
+function textOn(seed,light){ if(isLcarsTheme()) return '#eaffff'; return light?'#2a2018':'#f0e6cd'; }
+
+// per-book shade variant inside its series' color family
+function bookShade(seed,title){ const base=seriesBase(seed), c=hexToHsl(base), h=S.hashStr(title), light=isLightSeed(seed);
+  if(isLcarsTheme()){
+    const dh=((h&31)-15)*1.3, ds=(((h>>>5)&15)-7)*1.1, dl=(((h>>>9)&15)-7)*1.1;
+    return hslToHex((c.h+dh+360)%360, clamp(c.s+ds, light?26:55, light?66:100), clamp(c.l+dl, light?24:40, light?54:76)); }
+  const dh=((h&15)-7)*0.9, ds=(((h>>>4)&15)-7)*0.7, dl=(((h>>>8)&7)-3);
+  return hslToHex((c.h+dh+360)%360, clamp(c.s+ds, light?6:12, light?42:72), clamp(c.l+dl, light?70:16, light?92:42)); }
+
+function coverVariant(id,title,author,seed){
+  const d=S.det(id);
+  const override=d.color?true:false;
+  const base=override?d.color:bookShade(seed,title);
+  const light=override?(hexToHsl(d.color).l>58):(isLightSeed(seed));
+  const acc=accentFor(author,seed), foil=foilColor();
+  const text=textOn(seed,light);
+  const orn=ornFor(seed);
+  const band=hasBand(seed);
+  const bandColor= band ? (bandIsFoil(seed)?foil:(light?'rgba(0,0,0,.26)':'rgba(0,0,0,.4)')) : 'transparent';
+  const foilTitle=isFoilTitle(seed);
+  const titleColor= foilTitle ? foil : text;
+  return {base,light,acc,foil,text,orn,band,bandColor,titleColor};
+}
+// three scattered translucent shapes + a diagonal wash — deterministic per title, scaled by size
+function artShapes(title,v,scale){
+  const hh=S.hashStr(title+'art');
+  const cols=[v.acc,v.foil,v.base];
+  let out='';
+  for(let k=0;k<3;k++){
+    const hk=S.hashStr(title+'s'+k);
+    const round=(hk%3===0), sz=Math.round((44+hk%116)*scale), x=(hk>>>4)%100, y=(hk>>>9)%100, rot=(hk>>>2)%180, op=0.16+((hk>>>7)%22)/100;
+    out+='<span class="bc-shape" style="left:'+x+'%;top:'+y+'%;width:'+sz+'px;height:'+sz+'px;'+
+      'transform:translate(-50%,-50%) rotate('+rot+'deg);background:'+cols[k]+';opacity:'+op+';'+
+      'border-radius:'+(round?'50%':(hk%5)+'px')+'"></span>';
+  }
+  out+='<span class="bc-wash" style="background:linear-gradient('+(60+hh%80)+'deg,'+v.foil+'22,transparent 55%)"></span>';
+  return out;
+}
+// size: 'lg' (dashboard continue-reading + detail modal) shows the framed title/author
+// overlay; 'md' (chip/grid cards) is art-only since those cards show the title separately
+function bookCoverHtml(id,title,author,seriesLabel,standalone,size){
+  size=size||'md';
+  const realCover=S.details[id]&&S.details[id].cover;
+  if(realCover){
+    return '<div class="bookcover size-'+size+' realcover"><img class="bc-photo" src="'+realCover+'" alt="Cover of '+esc(title)+'"></div>';
+  }
+  const seed=seedOf(seriesLabel,title,standalone);
+  const v=coverVariant(id,title,author,seed);
+  const scale = size==='lg' ? 1 : 0.55;
+  let html='<div class="bookcover size-'+size+'" data-light="'+v.light+'" style="--bc:'+v.base+';--acc:'+v.acc+
+    ';--foil:'+v.foil+';--text:'+v.text+';--ttl:'+v.titleColor+';--cap:'+v.bandColor+'">';
+  html+='<span class="bc-art">'+artShapes(title,v,scale)+'</span>';
+  html+='<span class="bc-edge"></span>';
+  if(v.band) html+='<span class="bc-cap t"></span><span class="bc-cap b"></span>';
+  if(size==='lg'){
+    html+='<span class="bc-ribbon"></span>';
+    html+='<span class="bc-orn">'+v.orn+'</span>';
+    html+='<div class="bc-frame"><div class="bc-title">'+esc(title)+'</div>'+(author?'<div class="bc-author">'+esc(author)+'</div>':'')+'</div>';
+    if(seriesLabel) html+='<div class="bc-seriescap">'+esc(seriesLabel)+'</div>';
+  } else {
+    html+='<span class="bc-orn sm">'+v.orn+'</span>';
+  }
+  html+='</div>';
+  return html;
+}
+// compact-context wrapper: looks up the book's series/author context from its id
+function bookCoverFor(id,size){
+  const found=S.bookById(id); if(!found) return '<div class="bookcover size-'+( size||'md')+'"></div>';
+  const {s,b}=found; const standalone=s.series==='Standalone';
+  return bookCoverHtml(id,S.displayTitle(b),S.authorOf(s,b),standalone?'':s.series,standalone,size);
+}
 
 // ---------- toast ----------
 let toastTimer=null;
@@ -131,43 +244,64 @@ function renderDashboard(){
     </section>` : '';
 
   const reading=S.readingList();
-  const continueHtml = reading.length ? reading.map(({s,b})=>{
-      const d=S.det(b.id); const pct = d.ptot? Math.min(100,Math.round(100*(d.pcur||0)/d.ptot)) : null;
-      return `<article class="rcard">
-        ${coverHtml(b.id,S.displayTitle(b))}
-        <div class="rcard-body">
-          <div class="rcard-title">${esc(S.displayTitle(b))}</div>
-          <div class="rcard-sub">${esc(s.series==='Standalone'?S.authorOf(s,b):s.series+(b.num?' #'+b.num:''))}</div>
-          <div class="rcard-progress">
-            <div class="bar"><i style="width:${pct==null?0:pct}%"></i></div>
-            <span>${d.ptot? (d.pcur||0)+' / '+d.ptot+(d.fmt==='audio'?' ch':' p') : 'No page count set'}</span>
+  // the most recently page-updated book sits on top — strongest signal for
+  // "this is what you're actually reading right now"
+  const ordered=reading.slice().sort((a,b)=>{
+    const da=S.det(a.b.id), db=S.det(b.b.id);
+    const pa=+da.pcurAt||0, pb=+db.pcurAt||0;
+    if(pa||pb) return pb-pa;
+    const sa=da.started||'', sb=db.started||'';
+    if(sa&&sb) return sb.localeCompare(sa); return sa?-1:sb?1:0;
+  });
+  const continueHtml = ordered.length ? `<div class="herostack">${ordered.map(({s,b})=>{
+      const id=b.id, d=S.det(id); const standalone=s.series==='Standalone';
+      const pct = d.ptot? Math.min(100,Math.round(100*(d.pcur||0)/d.ptot)) : null;
+      const seriesLabel = standalone ? '' : s.series+(b.num?' · Book '+b.num:'');
+      return `<article class="featured">
+        <span class="flap">Currently Reading</span>
+        ${bookCoverHtml(id,S.displayTitle(b),S.authorOf(s,b),seriesLabel,standalone,'lg')}
+        <div class="fmeta">
+          ${seriesLabel?`<div class="fk">${esc(seriesLabel)}</div>`:''}
+          <h3>${esc(S.displayTitle(b))}</h3>
+          ${S.authorOf(s,b)?`<div class="fauth">${esc(S.authorOf(s,b))}</div>`:''}
+          <div class="fprog">
+            ${pct!=null?`<div class="bar"><i style="width:${pct}%"></i></div>`:''}
+            <div class="flbl">
+              <span>${d.started?'Started '+esc(S.fmtDate(d.started)):'In progress'}</span>
+              <span>${d.ptot? (d.pcur||0)+' / '+d.ptot+(d.fmt==='audio'?' ch':' p') : 'No page count set'}</span>
+            </div>
           </div>
-          <div class="rcard-actions">
-            <button class="stepbtn" data-act="step" data-id="${b.id}" data-delta="-10">&minus;10</button>
-            <button class="stepbtn" data-act="step" data-id="${b.id}" data-delta="10">+10</button>
-            <button class="donebtn" data-act="finish" data-id="${b.id}">Finished</button>
+          <div class="factions">
+            <button class="stepbtn" data-act="step" data-id="${id}" data-delta="-10">&minus;10</button>
+            <button class="stepbtn" data-act="step" data-id="${id}" data-delta="10">+10</button>
+            <button class="btn ghost sm" data-act="open" data-id="${id}">Details</button>
+            <button class="donebtn" data-act="finish" data-id="${id}">Finished &#10003;</button>
           </div>
         </div>
       </article>`;
-    }).join('') : '<div class="empty-row">Nothing in progress &mdash; open Library and start something.</div>';
+    }).join('')}</div>` : '<div class="empty-row">Nothing in progress &mdash; open Library and start something.</div>';
 
   const recs=S.recommendations(8);
-  const recHtml = recs.length ? recs.map(({s,b,reason})=>`
-      <article class="chipcard" data-act="open" data-id="${b.id}" role="button" tabindex="0">
-        ${coverHtml(b.id,S.displayTitle(b))}
+  const recHtml = recs.length ? recs.map(({s,b,reason})=>{
+      const standalone=s.series==='Standalone';
+      return `<article class="chipcard" data-act="open" data-id="${b.id}" role="button" tabindex="0">
+        ${bookCoverHtml(b.id,S.displayTitle(b),S.authorOf(s,b),standalone?'':s.series,standalone,'md')}
         <div class="chipcard-title">${esc(S.displayTitle(b))}</div>
         <div class="chipcard-reason">${esc(reason)}</div>
-      </article>`).join('') : '<div class="empty-row">Add a few books and rate some favorites to get picks here.</div>';
+      </article>`;
+    }).join('') : '<div class="empty-row">Add a few books and rate some favorites to get picks here.</div>';
 
   const upnext=S.upNextList();
   const upnextSection = upnext.length ? `<section class="dash-section">
       <div class="sec-head"><h2>Up next</h2></div>
-      <div class="hscroll">${upnext.map(({s,b})=>`
-        <article class="chipcard" data-act="open" data-id="${b.id}" role="button" tabindex="0">
-          ${coverHtml(b.id,S.displayTitle(b))}
+      <div class="hscroll">${upnext.map(({s,b})=>{
+        const standalone=s.series==='Standalone';
+        return `<article class="chipcard" data-act="open" data-id="${b.id}" role="button" tabindex="0">
+          ${bookCoverHtml(b.id,S.displayTitle(b),S.authorOf(s,b),standalone?'':s.series,standalone,'md')}
           <div class="chipcard-title">${esc(S.displayTitle(b))}</div>
           <div class="chipcard-reason">${esc(s.series)}</div>
-        </article>`).join('')}</div></section>` : '';
+        </article>`;
+      }).join('')}</div></section>` : '';
 
   return `<div class="dash">
     <section class="dash-hero">
@@ -183,7 +317,7 @@ function renderDashboard(){
     ${dueBanner}
     <section class="dash-section">
       <div class="sec-head"><h2>Continue reading</h2></div>
-      <div class="hscroll">${continueHtml}</div>
+      ${continueHtml}
     </section>
     <section class="dash-section">
       <div class="sec-head"><h2>Recommended for you</h2></div>
@@ -278,7 +412,7 @@ function renderLibrary(){
     const books=singles?singles.books.filter(b=>passesFilter(singles,b)):[];
     body = books.length ? `<div class="singles-grid">${books.map(b=>`
       <button class="singlecard" data-act="open" data-id="${b.id}">
-        ${coverHtml(b.id,S.displayTitle(b))}
+        ${bookCoverHtml(b.id,S.displayTitle(b),S.authorOf(singles,b),'',true,'md')}
         <div class="singlecard-body">
           <div class="book-title">${esc(S.displayTitle(b))}</div>
           <div class="book-sub">${esc(S.authorOf(singles,b))}</div>
@@ -405,10 +539,11 @@ function renderSettings(){
 function detailHtml(id){
   const found=S.bookById(id); if(!found) return '<p>This book was removed.</p>';
   const {s,b}=found; const d=S.det(id); const st=S.statusOf(id); const r=S.ratings[id]||0;
-  const subParts=[]; if(s.series!=='Standalone'){ subParts.push(s.series+(b.num?' #'+b.num:'')); if(S.authorOf(s,b)) subParts.push(S.authorOf(s,b)); }
+  const standalone=s.series==='Standalone';
+  const subParts=[]; if(!standalone){ subParts.push(s.series+(b.num?' #'+b.num:'')); if(S.authorOf(s,b)) subParts.push(S.authorOf(s,b)); }
   else subParts.push(S.authorOf(s,b)||'Standalone');
 
-  const pal=(getTheme()==='lcars'?LCARS_COLORS:LIB_COLORS);
+  const pal=(isLcarsTheme()?NIGHT_FAMILIES:FAMILIES).map(f=>f.dark);
   const swatches=pal.map(c=>`<button data-act="color-set" data-hex="${c}" style="background:${c};width:26px;height:26px;border-radius:50%;margin:3px;border:2px solid ${d.color===c?'var(--text)':'transparent'}"></button>`).join('');
 
   const notesHtml=S.notesFor(id).map(n=>`
@@ -433,7 +568,7 @@ function detailHtml(id){
 
   return `
     <div class="detail-head">
-      ${coverHtml(id,S.displayTitle(b))}
+      ${bookCoverHtml(id,S.displayTitle(b),S.authorOf(s,b),standalone?'':s.series,standalone,'lg')}
       <div>
         <div class="detail-title">${esc(S.displayTitle(b))}</div>
         <div class="detail-sub">${esc(subParts.join(' · '))}</div>
@@ -473,6 +608,17 @@ function detailHtml(id){
       <div class="kv"><span>Finished</span><span>${S.fmtDate(d.finished)||'–'}</span></div>
       ${readsHtml}
       ${st==='read'?`<div class="btnrow"><button class="btn ghost sm" data-act="reread" data-id="${id}">Start a reread</button></div>`:''}
+    </div>
+
+    <div class="detail-section">
+      <h4>Cover art</h4>
+      ${d.cover
+        ? `<p class="sub" style="margin:0 0 8px">Using the real cover pulled from your file.</p>
+           <button class="btn ghost sm" data-act="cover-clear" data-id="${id}">Remove cover</button>`
+        : st==='reading'
+          ? `<p class="sub" style="margin:0 0 8px">Pull the real cover out of an EPUB or CBZ file — shown while you’re reading it.</p>
+             <button class="btn ghost sm" data-act="cover-pull" data-id="${id}">Pull cover from file&hellip;</button>`
+          : `<p class="sub" style="margin:0">Mark this book Reading to pull a real cover from an EPUB or CBZ file.</p>`}
     </div>
 
     <div class="detail-section">
@@ -525,6 +671,8 @@ function openDetail(id){
       else if(act==='reread'){ S.startReread(bid); rerenderDetail(bid); toast('Started a reread ✓'); }
       else if(act==='color-set'){ S.setColor(bid,t.dataset.hex); rerenderDetail(bid); }
       else if(act==='color-clear'){ S.setColor(bid,''); rerenderDetail(bid); }
+      else if(act==='cover-clear'){ S.clearCover(bid); rerenderDetail(bid); toast('Cover removed.'); }
+      else if(act==='cover-pull'){ pullCoverFromFile(bid); }
       else if(act==='next-on'){ S.toggleNext(bid); rerenderDetail(bid); }
       else if(act==='next-off'){ S.toggleNext(bid); rerenderDetail(bid); }
       else if(act==='note-add'){ const ta=t.querySelector('[name="text"]'); if(S.addNote(bid,ta.value)){ rerenderDetail(bid); toast('Note added'); } }
@@ -553,6 +701,24 @@ function rerenderDetail(id){ if(!modalCtx) return;
   refreshView();
 }
 function rerenderDashboardOnly(){ if(currentView==='dashboard') renderView(); }
+
+function pullCoverFromFile(id){
+  const input=document.createElement('input');
+  input.type='file'; input.accept='.epub,.cbz,application/epub+zip,application/vnd.comicbook+zip'; input.hidden=true;
+  document.body.appendChild(input);
+  input.addEventListener('change',async ()=>{
+    const file=input.files[0]; input.remove(); if(!file) return;
+    toast('Reading cover from '+(/\.cbz$/i.test(file.name)?'CBZ':'EPUB')+'…');
+    try{
+      const dataUrl=await Covers.coverFromFile(file);
+      if(S.statusOf(id)!=='reading'){ toast('This book is no longer marked as reading — cover not saved.'); return; }
+      S.setCover(id,dataUrl);
+      if(currentDetailId===id) rerenderDetail(id); else refreshView();
+      toast('Cover added ✓');
+    }catch(err){ toast(err&&err.message ? err.message : 'Couldn’t read a cover from that file.'); }
+  });
+  input.click();
+}
 
 function openRename(id){
   const found=S.bookById(id); if(!found) return;

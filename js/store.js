@@ -242,6 +242,8 @@ export function applyStatus(id,next){
   status[id]=next; touch(id); sSt(); sDet();
 }
 export function clearCoverIfDone(id){ const d=details[id]; if(d && d.cover && statusOf(id)!=='reading'){ delete d.cover; sDet(); } }
+export function setCover(id,dataUrl){ det(id).cover=dataUrl; touch(id); sDet(); }
+export function clearCover(id){ const d=details[id]; if(d && d.cover){ delete d.cover; touch(id); sDet(); } }
 export function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today();
   markActiveToday(); clearCoverIfDone(id); touch(id); sSt(); sDet(); }
 export function setPages(id,which,val){ const d=det(id); const n=Math.max(0,Math.round(+val||0));
