@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v73';
+const APP_VERSION='v74';
 
 S.load();
 
@@ -1010,7 +1010,7 @@ function detailHtml(id){
     <div class="detail-section">
       <h4>Cover art</h4>
       ${d.cover
-        ? `<p class="sub" style="margin:0 0 8px">Using the real cover pulled from your file.</p>
+        ? `<p class="sub" style="margin:0 0 8px">Using a real cover.</p>
            <button class="btn ghost sm" data-act="cover-clear" data-id="${id}">Remove cover</button>`
         : st==='reading'
           ? `<p class="sub" style="margin:0 0 8px">Pull the real cover out of an EPUB or CBZ file — shown while you’re reading it.</p>
@@ -1027,6 +1027,7 @@ function detailHtml(id){
       <h4>Genres</h4>
       ${genresHtml(id)}
       <div class="btnrow" style="margin-top:8px">
+        ${!d.cover ? `<button class="btn ghost sm" data-act="cover-fetch" data-id="${id}" ${coverFetchLoading.has(id)?'disabled':''}>${coverFetchLoading.has(id)?'Fetching cover…':'Fetch cover'}</button>` : ''}
         <button class="btn ghost sm" data-act="discover-open" data-id="${id}">Find similar books</button>
       </div>
     </div>
@@ -1079,6 +1080,7 @@ function openDetail(id){
       else if(act==='cover-clear'){ S.clearCover(bid); rerenderDetail(bid); toast('Cover removed.'); }
       else if(act==='cover-pull'){ pullCoverFromFile(bid); }
       else if(act==='genres-fetch'||act==='genres-refetch'){ fetchGenres(bid); }
+      else if(act==='cover-fetch'){ fetchCoverFromApi(bid); }
       else if(act==='synopsis-fetch'||act==='synopsis-refetch'){ fetchSynopsis(bid); }
       else if(act==='synopsis-toggle'){
         if(synopsisCollapsed.has(bid)) synopsisCollapsed.delete(bid); else synopsisCollapsed.add(bid);
@@ -1160,6 +1162,27 @@ function fetchGenres(id){
     genresLoading.delete(id); S.setGenres(id,arr); rerenderDetail(id);
   }).catch(err=>{
     genresLoading.delete(id); toast((err&&err.message)||'Could not fetch genres.'); rerenderDetail(id);
+  });
+}
+
+// pulls a real cover from Open Library/Google Books by title+author — the
+// non-EPUB counterpart to "Pull cover from file" above, for books you
+// aren't reading from a file at all. One-at-a-time, on demand: no reason to
+// guess at covers for books nobody's looked at yet.
+const coverFetchLoading=new Set();
+function fetchCoverFromApi(id){
+  const found=S.bookById(id); if(!found) return;
+  const {s,b}=found;
+  const title=S.displayTitle(b), author=S.authorOf(s,b);
+  coverFetchLoading.add(id); rerenderDetail(id);
+  Discover.openLibrarySearch([title,author].filter(Boolean).join(' '),1).then(results=>{
+    coverFetchLoading.delete(id);
+    const match=results && results[0];
+    if(match && match.coverUrl){ S.setCover(id,match.coverUrl); toast('Cover added ✓'); }
+    else toast('No cover found for this one.');
+    rerenderDetail(id);
+  }).catch(err=>{
+    coverFetchLoading.delete(id); toast((err&&err.message)||'Could not fetch a cover.'); rerenderDetail(id);
   });
 }
 
