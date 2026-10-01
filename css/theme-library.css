@@ -1,0 +1,56 @@
+/* theme-library.css — warm reading-room palette: cream paper, leather-bound
+   accents, serif headings. This is the default theme. */
+@import url('fonts.css');
+
+:root[data-theme="library"]{
+  --bg:#f5ead6; --bg-elev:#eee0c3; --bg-card:#fffaf0;
+  --text:#2a1d10; --text-dim:#6c5842; --text-faint:#9c8a6c;
+  --border:#e2cfa4; --divider:#ecdeb8; --backdrop:rgba(32,20,8,.5);
+
+  --accent:#833a2c; --on-accent:#fff9ee;
+  --accent-ok:#3d6a43; --on-accent-ok:#fff;
+  --accent-warn:#b4701f; --accent-warn-bg:#f7e4c2; --on-accent-warn:#fff;
+  --accent-danger:#8c2f2f; --on-accent-danger:#fff;
+
+  --radius-s:8px; --radius-m:15px; --radius-l:22px; --radius-fab:28px;
+  --shadow-sm:0 1px 3px rgba(60,35,10,.1);
+  --shadow-fab:0 8px 20px rgba(90,45,20,.35);
+
+  --font-head:'Cinzel','Iowan Old Style',Georgia,serif;
+  --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --head-case:none; --head-tracking:.01em;
+
+  --fab-bg:var(--accent); --fab-text:var(--on-accent);
+  --tab-bg:var(--bg-card);
+  --ring-track:var(--border); --ring-fill:var(--accent);
+  --progress-track:var(--border); --progress-fill:var(--accent);
+  --chip-bg:var(--bg-elev); --chip-bg-active:var(--accent); --chip-text-active:var(--on-accent);
+
+  --dot-unread:#cdb98c; --dot-reading:var(--accent-warn); --dot-read:var(--accent-ok); --dot-dnf:#8a7a63;
+  --star:#b8860b; --cover-text:#fbeed8;
+  --toast-bg:#2a1d10; --toast-text:#f5ead6; --accent-contrast:#ffd27a;
+}
+
+:root[data-theme="library"] body{
+  background:
+    radial-gradient(ellipse at 20% -10%, rgba(255,255,255,.5), transparent 55%),
+    var(--bg);
+}
+:root[data-theme="library"] .brand{ font-family:var(--font-head); font-weight:700; }
+:root[data-theme="library"] .dash-hero{
+  background:linear-gradient(165deg, var(--bg-card), #fbf2dd);
+}
+:root[data-theme="library"] .rcard,
+:root[data-theme="library"] .chipcard,
+:root[data-theme="library"] .singlecard,
+:root[data-theme="library"] .series-group,
+:root[data-theme="library"] .statcard,
+:root[data-theme="library"] .setgroup{
+  box-shadow:var(--shadow-sm);
+}
+:root[data-theme="library"] .cover{
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.15), 2px 2px 0 rgba(0,0,0,.08);
+  font-family:var(--font-head);
+}
+:root[data-theme="library"] .fab{ font-family:var(--font-head); }
+:root[data-theme="library"] .tabbar{ box-shadow:0 -2px 10px rgba(60,35,10,.06); }

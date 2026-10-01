@@ -1,6 +1,8 @@
-const CACHE='reading-desk-v51';
+const CACHE='reading-desk-v52';
 const ASSETS=['./','./index.html','./manifest.webmanifest',
-  './icon-192.png','./icon-512.png','./icon-180.png','./icon-maskable-512.png'];
+  './icon-192.png','./icon-512.png','./icon-180.png','./icon-maskable-512.png',
+  './css/base.css','./css/theme-library.css','./css/theme-lcars.css','./css/fonts.css',
+  './js/store.js','./js/sync.js','./js/app.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('message',e=>{ if(e.data==='skipWaiting') self.skipWaiting(); });
@@ -15,7 +17,7 @@ self.addEventListener('fetch',e=>{
     );
     return;
   }
-  // cache-first for static assets (icons/manifest)
+  // cache-first for static assets (css/js/icons/manifest)
   e.respondWith(
     caches.match(req).then(r=> r || fetch(req).then(resp=>{
       if(resp && resp.status===200 && resp.type==='basic'){ const cp=resp.clone(); caches.open(CACHE).then(c=>c.put(req,cp)); }

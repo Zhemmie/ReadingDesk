@@ -1,0 +1,110 @@
+/* theme-lcars.css — Star Trek computer-display styling: black field, bold
+   condensed caps, solid color blocks, pill/elbow shapes. Uses only system
+   fonts (no network) so the PWA still works fully offline. */
+
+:root[data-theme="lcars"]{
+  --bg:#000000; --bg-elev:#140d1f; --bg-card:#0a0712;
+  --text:#eae6ff; --text-dim:#b7adf0; --text-faint:#756b9e;
+  --border:#2a2040; --divider:#1c1530; --backdrop:rgba(0,0,0,.75);
+
+  --accent:#ff9966; --on-accent:#000;
+  --accent-ok:#99cc99; --on-accent-ok:#000;
+  --accent-warn:#ffcc66; --accent-warn-bg:#2a2208; --on-accent-warn:#000;
+  --accent-danger:#cc6666; --on-accent-danger:#000;
+
+  --radius-s:6px; --radius-m:0 22px 22px 0; --radius-l:0 34px 34px 0; --radius-fab:50%;
+  --shadow-sm:none;
+  --shadow-fab:0 0 0 3px rgba(255,156,90,.35), 0 8px 22px rgba(0,0,0,.7);
+
+  --font-head:'Arial Narrow','Oswald','Helvetica Neue',Arial,sans-serif;
+  --font-body:Arial,'Helvetica Neue',Helvetica,sans-serif;
+  --head-case:uppercase; --head-tracking:.04em;
+
+  --fab-bg:var(--accent); --fab-text:#000;
+  --tab-bg:#060409;
+  --ring-track:#241a38; --ring-fill:var(--accent);
+  --progress-track:#1c1530; --progress-fill:var(--accent);
+  --chip-bg:#160f24; --chip-bg-active:var(--accent); --chip-text-active:#000;
+
+  --dot-unread:#453a66; --dot-reading:var(--accent-warn); --dot-read:var(--accent-ok); --dot-dnf:var(--accent-danger);
+  --star:#ffcc66; --cover-text:#000;
+  --toast-bg:#160f24; --toast-text:#ffcc99; --accent-contrast:#ff9966;
+
+  --lc-violet:#cc99cc; --lc-blue:#9999cc; --lc-red:#cc6666;
+}
+
+:root[data-theme="lcars"] body{ background:#000; font-weight:500; }
+:root[data-theme="lcars"] h1,
+:root[data-theme="lcars"] h2,
+:root[data-theme="lcars"] h3,
+:root[data-theme="lcars"] .brand,
+:root[data-theme="lcars"] .btn,
+:root[data-theme="lcars"] .tab,
+:root[data-theme="lcars"] .chips button,
+:root[data-theme="lcars"] .segctl button,
+:root[data-theme="lcars"] .segtoggle button,
+:root[data-theme="lcars"] .statuspill,
+:root[data-theme="lcars"] .modtabs button{ font-weight:700; }
+
+/* the "elbow": a horizontal bar whose far end sweeps into a half-round cap,
+   with a thick colored rail standing in front of it — the single most
+   recognizable LCARS shape, built from border-radius alone. */
+:root[data-theme="lcars"] .topbar{
+  background:var(--bg); border-bottom:3px solid var(--accent); padding-left:10px;
+}
+:root[data-theme="lcars"] .brand{ letter-spacing:.06em; }
+:root[data-theme="lcars"] .brand-mark{ border-radius:3px; width:14px; height:14px; box-shadow:none; }
+
+:root[data-theme="lcars"] .dash-hero{
+  background:var(--bg-card); border:none; border-radius:0 40px 40px 0; border-left:14px solid var(--accent);
+  padding-left:22px;
+}
+:root[data-theme="lcars"] .hero-greet{ color:var(--accent); font-weight:700; }
+
+:root[data-theme="lcars"] .sec-head{
+  background:var(--chip-bg); border-radius:0 18px 18px 0; border-left:10px solid var(--lc-violet);
+  padding:7px 12px; margin-bottom:12px;
+}
+:root[data-theme="lcars"] .sec-head h2{ color:var(--lc-violet); font-weight:700; }
+:root[data-theme="lcars"] .sec-head:nth-of-type(odd){ border-left-color:var(--accent); }
+
+:root[data-theme="lcars"] .rcard,
+:root[data-theme="lcars"] .chipcard,
+:root[data-theme="lcars"] .singlecard{
+  border:none; border-top:3px solid var(--accent); background:var(--bg-card); border-radius:4px 14px 4px 4px;
+}
+:root[data-theme="lcars"] .cover{ border-radius:3px; font-family:var(--font-head); font-weight:700; }
+
+:root[data-theme="lcars"] .series-group{ border:none; border-radius:0 20px 20px 0; border-left:8px solid var(--lc-blue); }
+:root[data-theme="lcars"] .series-group:nth-of-type(3n+2){ border-left-color:var(--accent); }
+:root[data-theme="lcars"] .series-group:nth-of-type(3n){ border-left-color:var(--lc-violet); }
+:root[data-theme="lcars"] .series-head{ background:var(--bg-card); }
+:root[data-theme="lcars"] .series-name{ text-transform:uppercase; font-weight:700; letter-spacing:.02em; }
+
+:root[data-theme="lcars"] .chips button,
+:root[data-theme="lcars"] .segctl,
+:root[data-theme="lcars"] .modtabs,
+:root[data-theme="lcars"] .statuspill,
+:root[data-theme="lcars"] .segtoggle button{ border-radius:99px; text-transform:uppercase; }
+:root[data-theme="lcars"] .chips button{ border:none; background:var(--chip-bg); }
+
+:root[data-theme="lcars"] .btn{ border-radius:99px; text-transform:uppercase; letter-spacing:.03em; }
+:root[data-theme="lcars"] .btn.ghost{ border:2px solid var(--border); }
+
+:root[data-theme="lcars"] .tabbar{ background:var(--tab-bg); border-top:3px solid var(--accent); }
+:root[data-theme="lcars"] .tab-lbl{ text-transform:uppercase; letter-spacing:.03em; }
+
+:root[data-theme="lcars"] .modal{ border:none; border-top:5px solid var(--accent); border-radius:26px 26px 0 0; }
+@media (min-width:620px){ :root[data-theme="lcars"] .modal{ border-radius:0 30px 30px 0; border-left:10px solid var(--accent); border-top:none; } }
+
+:root[data-theme="lcars"] .statcard{ border:none; border-radius:4px 20px 4px 4px; border-bottom:4px solid var(--lc-blue); }
+:root[data-theme="lcars"] .statcard:nth-of-type(2n){ border-bottom-color:var(--accent); }
+
+:root[data-theme="lcars"] .setgroup{ border:none; border-radius:0 18px 18px 0; border-left:8px solid var(--lc-violet); }
+
+/* decorative corner block, pure CSS, evokes the LCARS "cap" without extra markup */
+:root[data-theme="lcars"] .app::before{
+  content:""; display:block; height:18px; margin:0 16px; margin-top:8px;
+  background:linear-gradient(90deg, var(--accent) 0 18%, var(--lc-violet) 18% 36%, var(--lc-blue) 36% 54%, transparent 54%);
+  border-radius:12px 0 0 0;
+}
