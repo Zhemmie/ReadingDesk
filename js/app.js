@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v70';
+const APP_VERSION='v71';
 
 S.load();
 
@@ -1260,36 +1260,28 @@ let addSeriesName='';
 let addSeriesStatus='loading'; // loading|ok|error
 let addSeriesError='';
 let addSeriesVolumes=[];
-let addSeriesAlreadyCount=0;
 let addSeriesChecked=new Set();
+// no filtering of any kind here — every volume Open Library returns for
+// this series is shown, including ones already in the library. Dedup is
+// the person's own call via the checkboxes (or the existing "Merge
+// duplicate series" tool in Settings afterward), not something to guess at
+// silently; a book that matches by title but is actually a different
+// edition, translation, or printing is a real case auto-filtering would
+// have hidden with no way to override it.
 function addSeriesModalHtml(){
-  let body,sub;
-  if(addSeriesStatus==='loading'){ body='<div class="empty-row">Looking up the series on Open Library…</div>'; sub=''; }
-  else if(addSeriesStatus==='error'){ body=`<div class="empty-row">${esc(addSeriesError)}</div>`; sub=''; }
-  else if(!addSeriesVolumes.length){
-    // zero volumes after filtering out already-owned ones means two very
-    // different things: Open Library genuinely has nothing tagged with this
-    // exact series name, or it matched everything and you simply already
-    // own every volume — conflating those into one "not found" message is
-    // what made a complete collection look like a failed search
-    if(addSeriesAlreadyCount){
-      body=`<div class="empty-row">You already have all ${addSeriesAlreadyCount} volume${addSeriesAlreadyCount===1?'':'s'} of &ldquo;${esc(addSeriesName)}&rdquo; Open Library knows about, in your library.</div>`;
-    } else {
-      body='<div class="empty-row">No volumes found with that exact series name on Open Library. Try the Paste list tab instead.</div>';
-    }
-    sub='';
-  } else {
-    body='<div class="seriesvol-list">'+addSeriesVolumes.map((v,i)=>`
+  let body;
+  if(addSeriesStatus==='loading') body='<div class="empty-row">Looking up the series on Open Library…</div>';
+  else if(addSeriesStatus==='error') body=`<div class="empty-row">${esc(addSeriesError)}</div>`;
+  else if(!addSeriesVolumes.length) body='<div class="empty-row">No volumes found with that exact series name on Open Library. Try the Paste list tab instead.</div>';
+  else body='<div class="seriesvol-list">'+addSeriesVolumes.map((v,i)=>`
       <label class="seriesvol-row">
         <input type="checkbox" data-act="addseries-toggle" data-idx="${i}" ${addSeriesChecked.has(i)?'checked':''}>
         ${v.coverUrl?`<img src="${esc(v.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
-        <span class="addsearch-meta"><b>${v.num?('#'+esc(v.num)+' &mdash; '):''}${esc(v.title)}</b>${v.author?'<br>'+esc(v.author):''}</span>
+        <span class="addsearch-meta"><b>${v.num?('#'+esc(v.num)+' &mdash; '):''}${esc(v.title)}</b>${v.author?'<br>'+esc(v.author):''}${v.owned?' <i>(already in your library)</i>':''}</span>
       </label>`).join('')+'</div>';
-    sub = addSeriesAlreadyCount ? `${addSeriesAlreadyCount} you already have ${addSeriesAlreadyCount===1?'was':'were'} left out.` : '';
-  }
   const n=addSeriesChecked.size;
   return `<h3>Add &ldquo;${esc(addSeriesName)}&rdquo;</h3>
-    ${(body && addSeriesStatus==='ok' && addSeriesVolumes.length) ? `<p class="sub" style="margin:0 0 10px">Found on Open Library &mdash; uncheck any you don&rsquo;t want. ${sub}</p>` : ''}
+    ${addSeriesVolumes.length ? `<p class="sub" style="margin:0 0 10px">Found on Open Library &mdash; uncheck any you don&rsquo;t want.</p>` : ''}
     ${body}
     <div class="btnrow" style="margin-top:14px">
       <button class="btn ghost" data-act="close">Close</button>
@@ -1298,7 +1290,7 @@ function addSeriesModalHtml(){
 }
 function rerenderAddSeriesModal(){ if(!modalCtx) return; modalCtx.m.querySelector('.modal-body').innerHTML=addSeriesModalHtml(); }
 function openAddSeriesModal(seriesName){
-  addSeriesName=seriesName; addSeriesStatus='loading'; addSeriesVolumes=[]; addSeriesAlreadyCount=0; addSeriesChecked=new Set();
+  addSeriesName=seriesName; addSeriesStatus='loading'; addSeriesVolumes=[]; addSeriesChecked=new Set();
   showModal(addSeriesModalHtml(),{
     onAction:(t)=>{
       if(t.dataset.act==='close'){ closeModal(); return; }
@@ -1327,9 +1319,11 @@ function openAddSeriesModal(seriesName){
     }
   });
   Discover.openLibrarySeries(seriesName).then(vols=>{
+    // every volume is kept and shown, checked by default — "owned" is just
+    // a label on rows that match a title already in the library, not a
+    // reason to exclude or pre-uncheck them
     const existingTitles=new Set(S.allBooks().map(x=>S.displayTitle(x.b).toLowerCase()));
-    addSeriesAlreadyCount=vols.filter(v=>existingTitles.has(v.title.toLowerCase())).length;
-    addSeriesVolumes=vols.filter(v=>!existingTitles.has(v.title.toLowerCase()));
+    addSeriesVolumes=vols.map(v=>({...v, owned:existingTitles.has(v.title.toLowerCase())}));
     addSeriesStatus='ok';
     addSeriesChecked=new Set(addSeriesVolumes.map((_,i)=>i));
     rerenderAddSeriesModal();
