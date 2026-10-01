@@ -1,4 +1,4 @@
-const CACHE='reading-desk-v59';
+const CACHE='reading-desk-v60';
 const ASSETS=['./','./index.html','./manifest.webmanifest',
   './icon-192.png','./icon-512.png','./icon-180.png','./icon-maskable-512.png',
   './css/base.css','./css/theme-library.css','./css/theme-cyberpunk.css','./css/fonts.css','./css/fonts-cyberpunk.css',

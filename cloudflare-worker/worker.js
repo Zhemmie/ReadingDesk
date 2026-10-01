@@ -49,11 +49,34 @@ export default {
     for(const [k,v] of url.searchParams){ if(k!=='api') upstream.searchParams.set(k,v); }
 
     let resp;
-    try{ resp=await fetch(upstream.toString()); }
+    try{
+      // A Worker's default outbound fetch carries no User-Agent/Accept headers
+      // a real browser would send, which some sites' bot-protection (TasteDive
+      // included) flags on sight — regardless of whether the API key is valid.
+      // Looking like an ordinary browser request avoids that false block.
+      resp=await fetch(upstream.toString(),{headers:{
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'Accept':'application/json, text/plain, */*',
+        'Accept-Language':'en-US,en;q=0.9',
+      }});
+    }
     catch(e){ return new Response(JSON.stringify({error:'Could not reach the upstream API.'}),
       {status:502,headers:{'Content-Type':'application/json',...CORS_HEADERS}}); }
 
+    const contentType=resp.headers.get('content-type')||'';
     const body=await resp.text();
+
+    // Some upstreams answer a blocked/suspicious request with an HTML
+    // challenge or "Attention Required" page instead of a real API error.
+    // Forwarding that as-is would look like a 200/403 JSON response to the
+    // app and get misread as "your API key is invalid" — so call it out
+    // distinctly instead of passing it through.
+    const looksLikeHtmlBlock = !contentType.includes('json') && /^\s*<(!doctype|html)/i.test(body);
+    if(looksLikeHtmlBlock){
+      return new Response(JSON.stringify({error:'upstream_blocked',detail:'The upstream API blocked this request (not a sign your key is wrong) — try again in a bit.'}),
+        {status:503,headers:{'Content-Type':'application/json',...CORS_HEADERS}});
+    }
+
     return new Response(body,{status:resp.status,headers:{'Content-Type':'application/json',...CORS_HEADERS}});
   }
 };

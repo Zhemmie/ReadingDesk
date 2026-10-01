@@ -27,6 +27,16 @@ async function fetchJson(url){
   try{ res=await fetch(url); }
   catch(e){ throw new Error('Could not reach the server. This may be blocked by your browser, an ad blocker, or the site itself — check your connection and try again.'); }
   if(!res.ok){
+    // the proxy Worker reports this distinctly when the upstream API itself
+    // blocked the request (e.g. a bot-protection challenge page) rather than
+    // actually rejecting the key — surface that instead of blaming the key
+    if(res.status===503){
+      let parsed=null; try{ parsed=await res.json(); }catch(e){}
+      if(parsed && parsed.error==='upstream_blocked'){
+        throw new Error('The book site temporarily blocked this request (not your API key) — try again in a minute.');
+      }
+      throw new Error('The server returned an error (503). Try again shortly.');
+    }
     if(res.status===401||res.status===403) throw new Error('That API key was rejected. Double-check it in Settings.');
     if(res.status===429) throw new Error('Too many requests right now — wait a bit and try again.');
     throw new Error('The server returned an error ('+res.status+'). Try again shortly.');
