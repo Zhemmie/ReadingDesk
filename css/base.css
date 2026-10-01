@@ -163,6 +163,14 @@ a{ color:var(--accent); }
 .discover-card{ min-height:108px; justify-content:space-between; }
 .discover-card .chipcard-title{ -webkit-line-clamp:3; }
 
+/* ---------- discovery page ---------- */
+.seekrow{ display:flex; gap:8px; margin-bottom:14px; }
+.seekrow input{ flex:1; min-width:0; padding:10px 12px; border-radius:var(--radius-s); border:1px solid var(--border);
+  background:var(--bg-elev); color:var(--text); outline:none; }
+.seekrow input:focus{ border-color:var(--accent); }
+.discover-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+.discover-grid .chipcard{ flex:none; }
+
 /* ---------- library view ---------- */
 .lib{ display:flex; flex-direction:column; gap:12px; padding-top:6px; }
 .chips{ display:flex; gap:8px; flex-wrap:wrap; }
