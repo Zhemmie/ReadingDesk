@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v68';
+const APP_VERSION='v69';
 
 S.load();
 
@@ -1212,20 +1212,31 @@ function openRename(id){
 
 // ================= DISCOVERY "ADD A BOOK" SEARCH ASSIST =================
 // last Open Library search results shown on the Discovery page's "Add a
-// book" tab. Picking a result opens the full preview (cover/synopsis/
-// genres/series) rather than autofilling a form — there's no "pending
-// cover" to stage anymore, the preview modal applies it directly on add.
+// book" tab, and the query that produced them. Picking a result opens the
+// full preview (cover/synopsis/genres/series) rather than autofilling a
+// form — there's no "pending cover" to stage anymore, the preview modal
+// applies it directly on add.
 let addSearchResults=[];
+let addSearchQuery='';
 function addSearchResultsHtml(){
-  if(!addSearchResults.length) return '';
-  return '<div class="addsearch-results">'+addSearchResults.map((r,i)=>`
-      <div class="addsearch-row">
-        <button type="button" class="addsearch-item" data-act="add-search-preview" data-idx="${i}">
-          ${r.coverUrl?`<img src="${esc(r.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
-          <span class="addsearch-meta"><b>${esc(r.title)}</b>${r.author?' &mdash; '+esc(r.author):''}${r.year?' ('+r.year+')':''}${r.series?`<br><i>${esc(r.series+(r.num?' #'+r.num:''))}</i>`:''}</span>
-        </button>
-        ${r.series?`<button type="button" class="btn ghost sm addseries-link" data-act="add-series-open" data-series="${esc(r.series)}">Add the whole "${esc(r.series)}" series&hellip;</button>`:''}
-      </div>`).join('')+'</div>';
+  const bookList = addSearchResults.length
+    ? '<div class="addsearch-results">'+addSearchResults.map((r,i)=>`
+        <div class="addsearch-row">
+          <button type="button" class="addsearch-item" data-act="add-search-preview" data-idx="${i}">
+            ${r.coverUrl?`<img src="${esc(r.coverUrl)}" alt="" loading="lazy">`:'<span class="addsearch-nocoverthumb" aria-hidden="true"></span>'}
+            <span class="addsearch-meta"><b>${esc(r.title)}</b>${r.author?' &mdash; '+esc(r.author):''}${r.year?' ('+r.year+')':''}${r.series?`<br><i>${esc(r.series+(r.num?' #'+r.num:''))}</i>`:''}</span>
+          </button>
+          ${r.series?`<button type="button" class="btn ghost sm addseries-link" data-act="add-series-open" data-series="${esc(r.series)}">Add the whole "${esc(r.series)}" series&hellip;</button>`:''}
+        </div>`).join('')+'</div>'
+    : (addSearchQuery ? '<div class="empty-row">No book matches.</div>' : '');
+  // search also works as a series-name lookup: whatever you typed is tried
+  // directly as an exact series name, independent of whether any individual
+  // book result came back — covers searching "Between Earth and Sky" itself
+  // rather than one of its books' titles
+  const seriesShortcut = addSearchQuery
+    ? `<button type="button" class="btn ghost sm addseries-link" data-act="add-series-open" data-series="${esc(addSearchQuery)}" style="margin-top:8px">Looking for a series instead? Add the whole &ldquo;${esc(addSearchQuery)}&rdquo; series&hellip;</button>`
+    : '';
+  return bookList+seriesShortcut;
 }
 // its own tiny <form> (not nested in anything else) so Enter in the search
 // box searches rather than triggering some other submit — handled by a
@@ -1444,7 +1455,7 @@ function openGoalModal(){
 }
 
 // ================= EVENT WIRING =================
-document.getElementById('btnAdd').addEventListener('click',()=>{ discoverPageTab='add'; addSearchResults=[]; setView('discover'); });
+document.getElementById('btnAdd').addEventListener('click',()=>{ discoverPageTab='add'; addSearchResults=[]; addSearchQuery=''; setView('discover'); });
 $all('.tab').forEach(t=>t.addEventListener('click',()=>setView(t.dataset.view)));
 document.getElementById('btnSettingsTop').addEventListener('click',()=>setView('settings'));
 document.getElementById('btnSearch').addEventListener('click',()=>{
@@ -1540,13 +1551,14 @@ document.getElementById('view').addEventListener('submit',e=>{
   const t=e.target.closest('form'); if(!t || t.dataset.act!=='add-search') return;
   e.preventDefault();
   const q=(t.q.value||'').trim();
+  addSearchQuery=q; addSearchResults=[];
   const box=document.getElementById('addSearchResults');
   if(!q){ if(box) box.innerHTML=''; return; }
   if(box) box.innerHTML='<div class="empty-row">Searching Open Library…</div>';
   Discover.openLibrarySearch(q).then(results=>{
     addSearchResults=results;
     const liveBox=document.getElementById('addSearchResults');
-    if(liveBox) liveBox.innerHTML = results.length ? addSearchResultsHtml() : '<div class="empty-row">No matches.</div>';
+    if(liveBox) liveBox.innerHTML=addSearchResultsHtml();
   }).catch(err=>{
     const liveBox=document.getElementById('addSearchResults');
     if(liveBox) liveBox.innerHTML=`<div class="empty-row">${esc((err&&err.message)||'Search failed.')}</div>`;

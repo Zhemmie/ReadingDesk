@@ -16,6 +16,35 @@ function cleanTitle(raw){
   return {title:String(raw||'').trim(), series:'', num:''};
 }
 
+// Open Library's own "series" field is a plain string like "Between Earth
+// and Sky" or sometimes "Between Earth and Sky ; 1" / "Between Earth and
+// Sky, book 1" — split off a trailing volume number where there is one.
+function parseSeriesField(raw){
+  const s=String(raw||'').trim();
+  if(!s) return {series:'',num:''};
+  let m=s.match(/^(.*?)\s*[;,]?\s*(?:book|bk\.?|vol\.?|volume|no\.?|#)\s*(\d+(?:\.\d+)?)\s*$/i);
+  if(m) return {series:m[1].trim(),num:m[2]};
+  m=s.match(/^(.*?)\s*[;,]\s*(\d+(?:\.\d+)?)\s*$/);
+  if(m) return {series:m[1].trim(),num:m[2]};
+  return {series:s,num:''};
+}
+// Open Library records series membership two different, inconsistent ways:
+// sometimes baked right into the title text ("Black Sun (Between Earth and
+// Sky, #1)"), sometimes as the record's own separate "series" field
+// (just "Between Earth and Sky", often with no volume number attached at
+// all). Checking only the title text — the old behavior — silently missed
+// every book tagged the second way. This merges both, preferring the
+// series field when it's there since it's the more deliberate tag.
+function seriesInfoFor(d){
+  const fromField=parseSeriesField(Array.isArray(d.series) ? d.series[0] : d.series);
+  const fromTitle=cleanTitle(d.title);
+  return {
+    title: fromTitle.title || String(d.title||'').trim(),
+    series: fromField.series || fromTitle.series,
+    num: fromField.num || fromTitle.num
+  };
+}
+
 function qParam(prefix,value){
   // TasteDive expects e.g. "book:The Hobbit" as the literal q value, spaces
   // as '+' (form-style), not the %20 encodeURIComponent would otherwise give
@@ -76,16 +105,16 @@ export async function openLibrarySearch(query,limit){
   limit=limit||8;
   const q=String(query||'').trim();
   if(!q) return [];
-  const params=new URLSearchParams({q, fields:'title,author_name,first_publish_year,cover_i', limit:String(limit)});
+  const params=new URLSearchParams({q, fields:'title,author_name,first_publish_year,cover_i,series', limit:String(limit)});
   const url='https://openlibrary.org/search.json?'+params.toString();
   const json=await fetchJson(url);
   const docs=json && Array.isArray(json.docs) ? json.docs : [];
   return docs.map(d=>{
-    const parsed=cleanTitle(d.title);
+    const info=seriesInfoFor(d);
     return {
-      title: parsed.title || String(d.title||'').trim(),
-      series: parsed.series,
-      num: parsed.num,
+      title: info.title,
+      series: info.series,
+      num: info.num,
       author: Array.isArray(d.author_name) ? d.author_name[0] : '',
       year: d.first_publish_year || '',
       coverUrl: d.cover_i ? ('https://covers.openlibrary.org/b/id/'+d.cover_i+'-M.jpg') : ''
@@ -97,30 +126,30 @@ export async function openLibrarySearch(query,limit){
 // {title,num,author,year,coverUrl}, sorted by number. Open Library has no
 // "get series X" endpoint — this searches by the series name itself (a
 // generous limit, since a long-running series needs many hits) and keeps
-// only results whose own title parses as "Book (seriesName, #N)", the same
-// format cleanTitle() already relies on elsewhere. That means it only finds
-// what Open Library itself tagged that way — good for well-known series,
-// easy to miss obscure ones — so the caller should let the person review
-// and deselect before actually adding anything.
+// only results matching that exact series, via either Open Library's own
+// "series" field or a parenthetical in the title (see seriesInfoFor above).
+// That still only finds what Open Library itself tagged one of those two
+// ways — good for well-known series, easy to miss obscure ones — so the
+// caller should let the person review and deselect before adding anything.
 export async function openLibrarySeries(seriesName,limit){
   limit=limit||50;
   const q=String(seriesName||'').trim();
   if(!q) return [];
-  const params=new URLSearchParams({q, fields:'title,author_name,first_publish_year,cover_i', limit:String(limit)});
+  const params=new URLSearchParams({q, fields:'title,author_name,first_publish_year,cover_i,series', limit:String(limit)});
   const url='https://openlibrary.org/search.json?'+params.toString();
   const json=await fetchJson(url);
   const docs=json && Array.isArray(json.docs) ? json.docs : [];
   const wantedSeries=q.toLowerCase();
   const seen=new Set(), out=[];
   for(const d of docs){
-    const parsed=cleanTitle(d.title);
-    if(!parsed.series || parsed.series.toLowerCase()!==wantedSeries) continue;
-    const key=parsed.title.toLowerCase()+'|'+parsed.num;
+    const info=seriesInfoFor(d);
+    if(!info.series || info.series.toLowerCase()!==wantedSeries) continue;
+    const key=info.title.toLowerCase()+'|'+info.num;
     if(seen.has(key)) continue;
     seen.add(key);
     out.push({
-      title: parsed.title,
-      num: parsed.num,
+      title: info.title,
+      num: info.num,
       author: Array.isArray(d.author_name) ? d.author_name[0] : '',
       year: d.first_publish_year || '',
       coverUrl: d.cover_i ? ('https://covers.openlibrary.org/b/id/'+d.cover_i+'-M.jpg') : ''
