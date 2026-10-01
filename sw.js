@@ -1,8 +1,8 @@
-const CACHE='reading-desk-v57';
+const CACHE='reading-desk-v58';
 const ASSETS=['./','./index.html','./manifest.webmanifest',
   './icon-192.png','./icon-512.png','./icon-180.png','./icon-maskable-512.png',
   './css/base.css','./css/theme-library.css','./css/theme-cyberpunk.css','./css/fonts.css','./css/fonts-cyberpunk.css',
-  './js/store.js','./js/sync.js','./js/app.js','./js/covers.js'];
+  './js/store.js','./js/sync.js','./js/app.js','./js/covers.js','./js/discover.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('message',e=>{ if(e.data==='skipWaiting') self.skipWaiting(); });

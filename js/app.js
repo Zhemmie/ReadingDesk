@@ -7,10 +7,11 @@
 import * as S from './store.js';
 import * as Sync from './sync.js';
 import * as Covers from './covers.js';
+import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v57';
+const APP_VERSION='v58';
 
 S.load();
 
@@ -259,6 +260,62 @@ function stableReadingOrder(){
   return continueOrderIds.map(id=>byId.get(id));
 }
 
+// ---------- "Discover" row: external similar-book lookups via TasteDive ----------
+// Rendering is synchronous but the fetch isn't, so a cache entry doubles as
+// the loading/error/result state machine: render whatever's in the cache for
+// this seed right now, kick off a fetch if there's nothing there yet, and
+// let the fetch's completion trigger a refresh.
+const discoverCache=new Map();
+function discoverSeedBook(){
+  const rated=S.allBooks().filter(x=>S.ratings[x.b.id]).sort((a,b)=>(S.ratings[b.b.id]||0)-(S.ratings[a.b.id]||0));
+  if(rated.length) return rated[0];
+  const reading=S.readingList();
+  return reading.length ? reading[0] : null;
+}
+function discoverSectionHtml(){
+  const key=S.getTasteDiveKey();
+  if(!key){
+    return `<section class="dash-section">
+      <div class="sec-head"><h2>Discover</h2></div>
+      <div class="empty-row">Connect TasteDive in Settings to see books like your favorites that aren’t in your library yet.
+        <button class="btn ghost sm" data-act="open-settings" style="margin-top:8px">Open Settings</button></div>
+    </section>`;
+  }
+  const seed=discoverSeedBook();
+  if(!seed) return '';
+  const seedTitle=S.displayTitle(seed.b);
+  const cacheKey=seedTitle.toLowerCase();
+  let entry=discoverCache.get(cacheKey);
+  if(!entry){
+    entry={status:'loading'};
+    discoverCache.set(cacheKey,entry);
+    Discover.tasteDiveSimilar(seedTitle,key,8).then(items=>{
+      const existing=new Set(S.allBooks().map(x=>S.displayTitle(x.b).toLowerCase()));
+      const filtered=items.filter(it=>!existing.has(it.title.toLowerCase()));
+      discoverCache.set(cacheKey,{status:'ok',items:filtered});
+      if(currentView==='dashboard') refreshView();
+    }).catch(err=>{
+      discoverCache.set(cacheKey,{status:'error',error:(err&&err.message)||'Something went wrong.'});
+      if(currentView==='dashboard') refreshView();
+    });
+  }
+  let body;
+  if(entry.status==='loading') body=`<div class="empty-row">Looking for books like <i>${esc(seedTitle)}</i>…</div>`;
+  else if(entry.status==='error') body=`<div class="empty-row">${esc(entry.error)}
+      <button class="btn ghost sm" data-act="discover-retry" data-seed="${esc(cacheKey)}" style="margin-top:8px">Retry</button></div>`;
+  else if(!entry.items.length) body=`<div class="empty-row">No new suggestions from <i>${esc(seedTitle)}</i> right now.</div>`;
+  else body=`<div class="hscroll">${entry.items.map(it=>`
+      <article class="chipcard discover-card">
+        <div class="chipcard-title">${esc(it.title)}</div>
+        <div class="chipcard-reason">${it.series?esc(it.series+(it.num?' #'+it.num:'')):'Similar to '+esc(seedTitle)}</div>
+        <button class="btn ghost sm" data-act="discover-add" data-seed="${esc(cacheKey)}" data-title="${esc(it.title)}" data-series="${esc(it.series)}" data-num="${esc(it.num)}">+ Add</button>
+      </article>`).join('')}</div>`;
+  return `<section class="dash-section">
+    <div class="sec-head"><h2>Discover</h2></div>
+    ${body}
+  </section>`;
+}
+
 function renderDashboard(){
   const st=S.computeStats();
   const goal=S.getGoal();
@@ -362,6 +419,7 @@ function renderDashboard(){
       <div class="sec-head"><h2>Recommended for you</h2></div>
       <div class="hscroll">${recHtml}</div>
     </section>
+    ${discoverSectionHtml()}
     ${upnextSection}
   </div>`;
 }
@@ -544,6 +602,19 @@ function renderSettings(){
     </div>
 
     <div class="setgroup">
+      <h3>Discovery</h3>
+      ${S.getTasteDiveKey() ? `
+        <div class="setrow"><span>TasteDive</span><span>Connected</span></div>
+        <p class="sub" style="margin:10px 0">Powers the "Discover" row on your dashboard — books similar to your top-rated ones that aren't in your library yet.</p>
+        <button class="btn danger sm" data-act="taste-disconnect">Disconnect</button>
+      ` : `
+        <p class="sub" style="margin:0 0 10px">Paste a free <a href="https://tastedive.com/read/api" target="_blank" rel="noopener">TasteDive</a> API key to get a "Discover" row on your dashboard: books similar to your top-rated ones that aren't in your library yet. Stays on this device, like your sync token.</p>
+        <div class="field"><input id="tasteInput" placeholder="e.g. 1079186-YourApp-xxxxxxxx" autocomplete="off"></div>
+        <button class="btn primary" data-act="taste-connect">Connect</button>
+      `}
+    </div>
+
+    <div class="setgroup">
       <h3>Library tools</h3>
       <div class="btnrow">
         <button class="btn ghost sm" data-act="merge-dupes">Merge duplicate series</button>
@@ -673,6 +744,11 @@ function detailHtml(id){
     </div>
 
     <div class="detail-section">
+      <h4>Genres</h4>
+      ${genresHtml(id)}
+    </div>
+
+    <div class="detail-section">
       <h4>Reminders</h4>
       ${remindersHtml}
       <form data-act="reminder-save" data-id="${id}" class="field" style="margin-top:8px">
@@ -719,6 +795,7 @@ function openDetail(id){
       else if(act==='color-clear'){ S.setColor(bid,''); rerenderDetail(bid); }
       else if(act==='cover-clear'){ S.clearCover(bid); rerenderDetail(bid); toast('Cover removed.'); }
       else if(act==='cover-pull'){ pullCoverFromFile(bid); }
+      else if(act==='genres-fetch'||act==='genres-refetch'){ fetchGenres(bid); }
       else if(act==='next-on'){ S.toggleNext(bid); rerenderDetail(bid); }
       else if(act==='next-off'){ S.toggleNext(bid); rerenderDetail(bid); }
       else if(act==='note-add'){ const ta=t.querySelector('[name="text"]'); if(S.addNote(bid,ta.value)){ rerenderDetail(bid); toast('Note added'); } }
@@ -764,6 +841,31 @@ function pullCoverFromFile(id){
     }catch(err){ toast(err&&err.message ? err.message : 'Couldn’t read a cover from that file.'); }
   });
   input.click();
+}
+
+const genresLoading=new Set();
+function genresHtml(id){
+  const g=S.genresFor(id);
+  if(genresLoading.has(id)) return '<div class="empty-row">Looking up genres…</div>';
+  if(g && g.length){
+    return '<div class="genre-tags">'+g.map(x=>`<span class="genre-tag">${esc(x)}</span>`).join('')+'</div>'
+      +`<button class="btn ghost sm" data-act="genres-refetch" data-id="${id}" style="margin-top:8px">Refresh</button>`;
+  }
+  if(g && !g.length){
+    return '<p class="sub" style="margin:0 0 8px">No genres found for this one on Open Library.</p>'
+      +`<button class="btn ghost sm" data-act="genres-fetch" data-id="${id}">Try again</button>`;
+  }
+  return `<button class="btn ghost sm" data-act="genres-fetch" data-id="${id}">Fetch genres</button>`;
+}
+function fetchGenres(id){
+  const found=S.bookById(id); if(!found) return;
+  const {s,b}=found;
+  genresLoading.add(id); rerenderDetail(id);
+  Discover.openLibrarySubjects(S.displayTitle(b),S.authorOf(s,b)).then(arr=>{
+    genresLoading.delete(id); S.setGenres(id,arr); rerenderDetail(id);
+  }).catch(err=>{
+    genresLoading.delete(id); toast((err&&err.message)||'Could not fetch genres.'); rerenderDetail(id);
+  });
 }
 
 function openRename(id){
@@ -933,6 +1035,17 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(act==='pgcur-edit'){ startPcurEdit(t,id); }
   else if(act==='reminders-open') openReminders();
   else if(act==='goal-open') openGoalModal();
+  else if(act==='open-settings') setView('settings');
+  else if(act==='discover-retry'){ discoverCache.delete(t.dataset.seed); refreshView(); }
+  else if(act==='discover-add'){
+    const entry=S.addBook({series:t.dataset.series,num:t.dataset.num,title:t.dataset.title,status:'unread'});
+    if(entry){
+      const c=discoverCache.get(t.dataset.seed);
+      if(c && c.status==='ok') c.items=c.items.filter(it=>it.title!==t.dataset.title);
+      toast('Added “'+S.displayTitle(entry)+'” ✓');
+      refreshView();
+    }
+  }
   else if(act==='filter'){ statusFilter=t.dataset.filter; refreshView(); }
   else if(act==='seg'){ libTab=t.dataset.tab; refreshView(); }
   else if(act==='series-toggle'){ const sid=t.dataset.sid; openSeries.has(sid)?openSeries.delete(sid):openSeries.add(sid); refreshView(); }
@@ -957,6 +1070,12 @@ document.getElementById('view').addEventListener('click',e=>{
     const r=Sync.removeDevice(t.dataset.devid); refreshView();
     if(r) toast('Removed “'+r.name+'”.','Undo',r.undo);
   }
+  else if(act==='taste-connect'){
+    const inp=document.getElementById('tasteInput'); const k=(inp.value||'').trim();
+    if(!k){ toast('Paste a key first.'); return; }
+    S.setTasteDiveKey(k); discoverCache.clear(); refreshView(); toast('Connected ✓');
+  }
+  else if(act==='taste-disconnect'){ S.setTasteDiveKey(''); discoverCache.clear(); refreshView(); toast('Disconnected on this device.'); }
 });
 document.getElementById('view').addEventListener('change',e=>{
   const t=e.target.closest('[data-act]'); if(!t) return;

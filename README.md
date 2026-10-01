@@ -18,10 +18,24 @@ js/store.js                  all data: catalog, status, ratings, details,
                               notes, reminders, stats, import/export,
                               migrations from the old single-file version
 js/sync.js                   GitHub Gist sync (unchanged format/behavior)
+js/covers.js                 pulls a real cover image out of an EPUB/CBZ
+js/discover.js                optional external lookups: TasteDive "similar
+                              books" and Open Library genre tags
 js/app.js                    rendering, modals, event wiring
 manifest.webmanifest, sw.js  PWA install + offline caching
 icon-*.png, icon-512.ico    app icons
 ```
+
+## Optional: book discovery
+
+Settings -> Discovery lets you paste a free [TasteDive](https://tastedive.com/read/api)
+API key to get a "Discover" row on the dashboard (books similar to your
+top-rated ones, not yet in your library). The key stays in this browser's
+storage only, like the GitHub sync token — it's never written into the
+app's code or synced anywhere. Genre tags on a book's detail page come from
+[Open Library](https://openlibrary.org/dev/docs/api/search) and need no key
+at all; fetch them on demand per book. Both are optional and the rest of
+the app works fully without them.
 
 No build step. Everything is plain ES modules and CSS, so you can keep
 editing it by hand or re-uploading files the same way as before.

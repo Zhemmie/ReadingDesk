@@ -136,6 +136,7 @@
   font-family:var(--font-body); text-transform:uppercase; letter-spacing:.07em;
 }
 :root[data-theme="cyberpunk"] .chips button[aria-pressed="true"]{ box-shadow:0 0 10px -2px rgba(45,231,255,.6); }
+:root[data-theme="cyberpunk"] .genre-tag{ font-family:var(--font-body); border:1px solid var(--border); text-transform:uppercase; letter-spacing:.04em; font-size:10px; }
 :root[data-theme="cyberpunk"] .btn{ border-radius:var(--radius-s); }
 :root[data-theme="cyberpunk"] .btn.primary{
   background:linear-gradient(180deg,#0f2130,#081420); border:1px solid var(--accent); color:var(--accent);

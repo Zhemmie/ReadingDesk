@@ -8,6 +8,7 @@ export const K_NOTES='rl.notes.v1', K_REM='rl.reminders.v1';
 export const K_GOAL='rl.goal', K_THEME='rl.theme', K_BKUP='rl.lastBackupAt';
 export const SK_TOKEN='rl.sync.token', SK_GIST='rl.sync.gist', SK_LAST='rl.sync.lastAt';
 export const SK_DEVID='rl.sync.devid', SK_DEVNAME='rl.sync.devname';
+export const K_TASTE='rl.discover.tastedive';
 
 export const ORDER=['unread','reading','read','dnf'];
 export const ST_LABEL={unread:'Unread',reading:'Reading',read:'Read',dnf:'Set aside'};
@@ -244,6 +245,14 @@ export function applyStatus(id,next){
 export function clearCoverIfDone(id){ const d=details[id]; if(d && d.cover && statusOf(id)!=='reading'){ delete d.cover; sDet(); } }
 export function setCover(id,dataUrl){ det(id).cover=dataUrl; touch(id); sDet(); }
 export function clearCover(id){ const d=details[id]; if(d && d.cover){ delete d.cover; touch(id); sDet(); } }
+
+// ---------- genres (fetched on-demand from Open Library, cached per book) ----------
+export function genresFor(id){ return (details[id] && details[id].genres) || null; }
+export function setGenres(id,arr){ det(id).genres=arr; touch(id); sDet(); }
+
+// ---------- TasteDive discovery key (local only, not synced — like a device setting) ----------
+export function getTasteDiveKey(){ return localStorage.getItem(K_TASTE)||''; }
+export function setTasteDiveKey(k){ k=(k||'').trim(); try{ if(k) localStorage.setItem(K_TASTE,k); else localStorage.removeItem(K_TASTE); }catch(e){} }
 export function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today();
   markActiveToday(); clearCoverIfDone(id); touch(id); sSt(); sDet(); }
 export function setPages(id,which,val){ const d=det(id); const n=Math.max(0,Math.round(+val||0));
