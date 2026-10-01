@@ -16,21 +16,33 @@ function $(sel,root){ return (root||document).querySelector(sel); }
 function $all(sel,root){ return Array.from((root||document).querySelectorAll(sel)); }
 
 // ---------- theme ----------
-function getTheme(){ const t=localStorage.getItem(S.K_THEME); return t==='lcars'?'lcars':'library'; }
-function setTheme(t){ t=t==='lcars'?'lcars':'library'; try{localStorage.setItem(S.K_THEME,t);}catch(e){}
+function getTheme(){ const t=localStorage.getItem(S.K_THEME); return t==='cyberpunk'?'cyberpunk':'library'; }
+function setTheme(t){
+  t=t==='cyberpunk'?'cyberpunk':'library';
+  const changed = t!==getTheme();
+  try{localStorage.setItem(S.K_THEME,t);}catch(e){}
   document.documentElement.setAttribute('data-theme',t);
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', t==='lcars'?'#000000':'#f5ead6');
-  refreshView(); }
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', t==='cyberpunk'?'#04060a':'#f5ead6');
+  if(changed){
+    const fl=document.getElementById('modeflash');
+    if(fl){
+      fl.className='modeflash '+(t==='cyberpunk'?'boot-in':'boot-out');
+      const dur = t==='cyberpunk'?560:360;
+      clearTimeout(fl._t); fl._t=setTimeout(()=>{ fl.className='modeflash'; },dur);
+    }
+  }
+  refreshView();
+}
 document.documentElement.setAttribute('data-theme',getTheme());
-document.querySelector('meta[name="theme-color"]').setAttribute('content', getTheme()==='lcars'?'#000000':'#f5ead6');
-function isLcarsTheme(){ return getTheme()==='lcars'; }
+document.querySelector('meta[name="theme-color"]').setAttribute('content', getTheme()==='cyberpunk'?'#04060a':'#f5ead6');
+function isCyberpunkTheme(){ return getTheme()==='cyberpunk'; }
 
 // ---------- procedural cover-art engine ----------
 // Ported from the single-file app: every book gets a deterministic "cover" —
 // a family color (by series), a per-book shade variant, an ornament glyph,
 // a scattering of translucent shapes, and (at large size) a framed title/
-// author. Library reuses the old warm-cloth palette; LCARS reuses the old
-// night-mode neon palette (dark=hot/saturated, light=dim/quiet) almost
+// author. Library reuses the old warm-cloth palette; Cyberpunk reuses the
+// old night-mode neon palette (dark=hot/saturated, light=dim/quiet) almost
 // verbatim, since it already reads as a "console readout" aesthetic.
 const FAMILIES=[
   {dark:'#5a2321',light:'#c7a199'},{dark:'#234a2f',light:'#a6c1a8'},{dark:'#22314f',light:'#a3b1cb'},
@@ -61,20 +73,20 @@ function hslToHex(h,s,l){ s/=100; l/=100; const k=n=>(n+h/30)%12; const a=s*Math
 
 // seed key: series name for series books, the book's own title for standalones
 function seedOf(seriesName,title,standalone){ return standalone ? title : seriesName; }
-function famFor(seed){ const list=isLcarsTheme()?NIGHT_FAMILIES:FAMILIES; return list[S.hashStr(seed)%list.length]; }
+function famFor(seed){ const list=isCyberpunkTheme()?NIGHT_FAMILIES:FAMILIES; return list[S.hashStr(seed)%list.length]; }
 function isLightSeed(seed){ return (S.hashStr(seed+'lite')%100)<26; }
 function seriesBase(seed){ return isLightSeed(seed)?famFor(seed).light:famFor(seed).dark; }
 function hasBand(seed){ return (S.hashStr(seed+'band')%100)<64; }
 function bandIsFoil(seed){ return (S.hashStr(seed+'bandfoil')%2)===0; }
 function isFoilTitle(seed){ return (S.hashStr(seed+'foil')%100)<55; }
-function ornFor(seed){ const list=isLcarsTheme()?NIGHT_ORN:ORN; return list[S.hashStr(seed+'orn')%list.length]; }
-function accentFor(author,seed){ const list=isLcarsTheme()?NIGHT_ACCENTS:ACCENTS; return list[S.hashStr((author||seed)+'acc')%list.length]; }
-function foilColor(){ return isLcarsTheme()?'#ffcc66':'#c9a227'; }
-function textOn(seed,light){ if(isLcarsTheme()) return '#eaffff'; return light?'#2a2018':'#f0e6cd'; }
+function ornFor(seed){ const list=isCyberpunkTheme()?NIGHT_ORN:ORN; return list[S.hashStr(seed+'orn')%list.length]; }
+function accentFor(author,seed){ const list=isCyberpunkTheme()?NIGHT_ACCENTS:ACCENTS; return list[S.hashStr((author||seed)+'acc')%list.length]; }
+function foilColor(){ return isCyberpunkTheme()?'#2de7ff':'#c9a227'; }
+function textOn(seed,light){ if(isCyberpunkTheme()) return '#eaffff'; return light?'#2a2018':'#f0e6cd'; }
 
 // per-book shade variant inside its series' color family
 function bookShade(seed,title){ const base=seriesBase(seed), c=hexToHsl(base), h=S.hashStr(title), light=isLightSeed(seed);
-  if(isLcarsTheme()){
+  if(isCyberpunkTheme()){
     const dh=((h&31)-15)*1.3, ds=(((h>>>5)&15)-7)*1.1, dl=(((h>>>9)&15)-7)*1.1;
     return hslToHex((c.h+dh+360)%360, clamp(c.s+ds, light?26:55, light?66:100), clamp(c.l+dl, light?24:40, light?54:76)); }
   const dh=((h&15)-7)*0.9, ds=(((h>>>4)&15)-7)*0.7, dl=(((h>>>8)&7)-3);
@@ -488,8 +500,8 @@ function renderSettings(){
       <div class="themepick">
         <button class="themeopt" data-act="theme-pick" data-theme="library" aria-pressed="${String(theme==='library')}">
           <div class="swatch" style="background:linear-gradient(135deg,#f5ead6,#833a2c)"></div>Library</button>
-        <button class="themeopt" data-act="theme-pick" data-theme="lcars" aria-pressed="${String(theme==='lcars')}">
-          <div class="swatch" style="background:linear-gradient(135deg,#000,#ff9c5a)"></div>LCARS</button>
+        <button class="themeopt" data-act="theme-pick" data-theme="cyberpunk" aria-pressed="${String(theme==='cyberpunk')}">
+          <div class="swatch" style="background:linear-gradient(135deg,#04060a,#2de7ff)"></div>Cyberpunk</button>
       </div>
     </div>
 
@@ -566,7 +578,7 @@ function detailHtml(id){
   const subParts=[]; if(!standalone){ subParts.push(s.series+(b.num?' #'+b.num:'')); if(S.authorOf(s,b)) subParts.push(S.authorOf(s,b)); }
   else subParts.push(S.authorOf(s,b)||'Standalone');
 
-  const pal=(isLcarsTheme()?NIGHT_FAMILIES:FAMILIES).map(f=>f.dark);
+  const pal=(isCyberpunkTheme()?NIGHT_FAMILIES:FAMILIES).map(f=>f.dark);
   const swatches=pal.map(c=>`<button data-act="color-set" data-hex="${c}" style="background:${c};width:26px;height:26px;border-radius:50%;margin:3px;border:2px solid ${d.color===c?'var(--text)':'transparent'}"></button>`).join('');
 
   const notesHtml=S.notesFor(id).map(n=>`

@@ -1,9 +1,9 @@
 # The Reading Desk - installable app
 
 A personal reading tracker with a proper dashboard, fast add flow, notes,
-reminders, and two themes (Library and LCARS). Installable, offline-capable
-Android/desktop app. Everything runs on your device; no server code, no
-accounts required.
+reminders, and two themes (Library and Cyberpunk). Installable, offline-
+capable Android/desktop app. Everything runs on your device; no server
+code, no accounts required.
 
 ## Files
 
@@ -11,8 +11,9 @@ accounts required.
 index.html                 app shell (nav, mount points, loads js/app.js)
 css/base.css                layout + components, theme-neutral
 css/theme-library.css       warm "reading room" theme (default)
-css/theme-lcars.css         Star Trek LCARS-style theme
+css/theme-cyberpunk.css     neon terminal/HUD theme (CRT scanlines, glow)
 css/fonts.css                the embedded Cinzel heading font
+css/fonts-cyberpunk.css      the embedded Orbitron + Share Tech Mono fonts
 js/store.js                  all data: catalog, status, ratings, details,
                               notes, reminders, stats, import/export,
                               migrations from the old single-file version

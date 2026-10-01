@@ -1,6 +1,6 @@
 /* base.css — structure and components, theme-neutral.
    Every color/shape/font comes from custom properties; theme-library.css and
-   theme-lcars.css each define a complete set of them under :root[data-theme=...]. */
+   theme-cyberpunk.css each define a complete set of them under :root[data-theme=...]. */
 
 *,*::before,*::after{ box-sizing:border-box; }
 html,body{ height:100%; }
@@ -311,3 +311,30 @@ a{ color:var(--accent); }
 .toast button{ color:var(--accent-contrast,var(--accent)); font-weight:600; white-space:nowrap; }
 
 .sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+
+/* ---------- theme-switch "boot" flash ----------
+   A brief full-screen flicker when switching themes, strongest going into
+   Cyberpunk (a CRT power-on flash) and a quieter warm fade coming back out
+   to Library. Theme-agnostic mechanics; the colors are deliberately literal
+   rather than var()-driven since the flash is about the *transition*. */
+.modeflash{ position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:0; }
+.modeflash.boot-in{ animation:bootIn .55s ease-out; }
+.modeflash.boot-out{ animation:bootOut .35s ease-out; }
+@keyframes bootIn{
+  0%{ opacity:0; background:#04060a; }
+  6%{ opacity:1; background:#bdf6ff; }
+  12%{ opacity:0; }
+  18%{ opacity:.7; background:#2de7ff; }
+  26%{ opacity:0; }
+  34%{ opacity:.3; background:#04060a; }
+  40%{ opacity:0; }
+  100%{ opacity:0; }
+}
+.modeflash.boot-in::after{ content:""; position:absolute; left:0; right:0; top:-4%; height:6%;
+  background:linear-gradient(180deg,transparent,rgba(45,231,255,.55),transparent);
+  animation:bootScan .55s ease-out; }
+@keyframes bootScan{ 0%{ top:-6%; } 100%{ top:100%; } }
+@keyframes bootOut{ 0%{ opacity:0; } 30%{ opacity:.5; background:#241a10; } 100%{ opacity:0; } }
+@media (prefers-reduced-motion:reduce){
+  .modeflash.boot-in,.modeflash.boot-out,.modeflash.boot-in::after{ animation:none; }
+}

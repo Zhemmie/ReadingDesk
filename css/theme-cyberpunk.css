@@ -1,0 +1,194 @@
+/* theme-cyberpunk.css — the old app's "night mode" terminal/neon aesthetic,
+   rebuilt as a full theme: deep black, CRT scanlines, cyan/magenta glow
+   blooms, Orbitron display type, Share Tech Mono everywhere else. Sharp
+   terminal-panel shapes (2-8px radii), not pills — this is a HUD, not a
+   touchscreen console. */
+@import url('fonts-cyberpunk.css');
+
+:root[data-theme="cyberpunk"]{
+  --bg:#04060a; --bg-elev:#0a141f; --bg-card:#0a121c;
+  --text:#eaffff; --text-dim:#8fb0bd; --text-faint:#4d6b7a;
+  --border:#163044; --divider:#0f2130; --backdrop:rgba(2,6,10,.82);
+
+  --accent:#2de7ff; --on-accent:#02141a;
+  --accent-ok:#33ff9c; --on-accent-ok:#02140a;
+  --accent-warn:#ffb02e; --accent-warn-bg:#241a08; --on-accent-warn:#1a1000;
+  --accent-danger:#ff2bd6; --on-accent-danger:#1a0014;
+
+  --radius-s:3px; --radius-m:6px; --radius-l:8px; --radius-fab:50%;
+  --shadow-sm:none;
+  --shadow-fab:0 0 0 3px rgba(45,231,255,.3), 0 0 24px -4px rgba(45,231,255,.7);
+
+  --font-head:'Orbitron',sans-serif;
+  --font-body:'Share Tech Mono',ui-monospace,monospace;
+  --head-case:uppercase; --head-tracking:.08em;
+
+  --fab-bg:var(--accent); --fab-text:var(--on-accent);
+  --tab-bg:#02050a;
+  --ring-track:#0f2130; --ring-fill:var(--accent);
+  --progress-track:#0b1622; --progress-fill:linear-gradient(90deg,#a01a86,#ff2bd6,#8ff5ff);
+  --chip-bg:#0c1420; --chip-bg-active:var(--accent); --chip-text-active:var(--on-accent);
+
+  --dot-unread:#1a2e3c; --dot-reading:var(--accent-warn); --dot-read:var(--accent-ok); --dot-dnf:var(--accent-danger);
+  --star:var(--accent); --cover-text:#eaffff;
+  --toast-bg:#0a121c; --toast-text:#c9f3ff; --accent-contrast:var(--accent);
+
+  --cp-mag:#ff2bd6;
+}
+
+@keyframes cpBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+@keyframes cpScan{ 0%{ top:0; } 100%{ top:100%; } }
+@keyframes cpGlowPulse{ 0%,100%{ box-shadow:0 0 14px -2px rgba(45,231,255,.5); } 50%{ box-shadow:0 0 26px 2px rgba(45,231,255,.85); } }
+
+:root[data-theme="cyberpunk"] body{
+  background:
+    repeating-linear-gradient(0deg, rgba(45,231,255,.03) 0 1px, transparent 1px 3px),
+    radial-gradient(120% 70% at 50% -8%, rgba(23,120,160,.28), transparent 55%),
+    radial-gradient(90% 60% at 50% 120%, rgba(90,20,120,.22), transparent 60%),
+    var(--bg);
+}
+:root[data-theme="cyberpunk"] h1,
+:root[data-theme="cyberpunk"] h2,
+:root[data-theme="cyberpunk"] h3,
+:root[data-theme="cyberpunk"] .brand,
+:root[data-theme="cyberpunk"] .fmeta h3{
+  text-shadow:0 0 8px rgba(45,231,255,.55), 0 0 24px rgba(45,231,255,.2);
+}
+
+:root[data-theme="cyberpunk"] .topbar{ border-bottom:1px solid var(--border); box-shadow:0 1px 14px -4px rgba(45,231,255,.3); }
+:root[data-theme="cyberpunk"] .brand{ letter-spacing:.05em; font-weight:700; }
+:root[data-theme="cyberpunk"] .brand-mark{ box-shadow:0 0 8px 2px var(--accent); animation:cpBlink 2.4s ease-in-out infinite; }
+:root[data-theme="cyberpunk"] .iconbtn:hover{ color:var(--accent); text-shadow:0 0 6px rgba(45,231,255,.6); }
+:root[data-theme="cyberpunk"] .searchbar input{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .searchbar input:focus{ box-shadow:0 0 0 1px var(--accent), 0 0 14px -4px rgba(45,231,255,.6); }
+
+:root[data-theme="cyberpunk"] .dash-hero{
+  background:linear-gradient(180deg,#0a1420,#050a12); border:1px solid var(--border);
+  box-shadow:0 0 30px -12px rgba(45,231,255,.2), inset 0 0 40px rgba(45,231,255,.03);
+  position:relative; overflow:hidden;
+}
+:root[data-theme="cyberpunk"] .dash-hero::before{
+  content:"\276F root/library \2014 session active"; position:absolute; top:9px; right:14px;
+  font-family:var(--font-body); font-size:9px; letter-spacing:.06em; color:var(--text-faint); pointer-events:none;
+}
+@media (max-width:460px){ :root[data-theme="cyberpunk"] .dash-hero::before{ display:none; } }
+:root[data-theme="cyberpunk"] .hero-greet{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .hero-stat b{ text-shadow:0 0 8px rgba(45,231,255,.4); }
+:root[data-theme="cyberpunk"] .flame.lit{ filter:drop-shadow(0 0 5px rgba(255,176,46,.8)); }
+
+:root[data-theme="cyberpunk"] .sec-head{ background:none; border-left:2px solid var(--accent); padding:0 0 0 10px; margin-bottom:12px; }
+:root[data-theme="cyberpunk"] .sec-head h2{ color:var(--text-dim); text-shadow:none; }
+:root[data-theme="cyberpunk"] .sec-head h2::before{ content:"// "; color:var(--accent); }
+
+:root[data-theme="cyberpunk"] .featured{
+  background:linear-gradient(180deg,#0a1420,#050a12); border:1px solid var(--border);
+  box-shadow:0 0 30px -12px rgba(45,231,255,.15), inset 0 0 40px rgba(45,231,255,.03);
+}
+:root[data-theme="cyberpunk"] .featured:hover{ box-shadow:0 0 36px -8px rgba(45,231,255,.3), inset 0 0 40px rgba(45,231,255,.04); }
+:root[data-theme="cyberpunk"] .flap{
+  background:#050a12; border:1px solid var(--cp-mag); color:var(--cp-mag); border-radius:2px;
+  text-shadow:0 0 6px rgba(255,43,214,.6); box-shadow:none; left:auto; right:20px;
+  font-family:var(--font-body);
+}
+:root[data-theme="cyberpunk"] .fk{ color:var(--text-faint); }
+:root[data-theme="cyberpunk"] .fauth{ font-style:normal; color:var(--text-dim); }
+:root[data-theme="cyberpunk"] .flbl,
+:root[data-theme="cyberpunk"] .pgcur{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .pgcur{ color:var(--accent-warn); text-shadow:0 0 6px rgba(255,176,46,.4); }
+
+/* ---------- procedural book covers: neon border + scanning beam ---------- */
+:root[data-theme="cyberpunk"] .bookcover{
+  border-radius:3px; border:1px solid var(--foil,var(--accent));
+  box-shadow:0 0 22px -6px var(--acc,var(--accent)), inset 0 0 26px rgba(0,0,0,.5);
+}
+:root[data-theme="cyberpunk"] .bookcover::after{ background:none; } /* cancel the warm gloss sheen */
+:root[data-theme="cyberpunk"] .bookcover.size-lg{ position:relative; overflow:hidden; }
+:root[data-theme="cyberpunk"] .bookcover.size-lg::before{
+  content:""; position:absolute; left:0; right:0; height:2px; z-index:6; pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--foil,var(--accent)),transparent);
+  opacity:.75; animation:cpScan 3.2s linear infinite;
+}
+:root[data-theme="cyberpunk"] .bc-frame{ background:rgba(4,10,16,.6); border-color:var(--foil,var(--accent)); box-shadow:none; }
+:root[data-theme="cyberpunk"] .bc-title{ font-family:var(--font-head); letter-spacing:0; text-shadow:0 0 6px var(--ttl,var(--accent)); }
+:root[data-theme="cyberpunk"] .bc-author{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .bc-seriescap{
+  background:rgba(4,10,16,.65); border:1px solid rgba(45,231,255,.25); border-radius:3px;
+  padding:3px 6px; left:7px; right:7px; bottom:6px; font-family:var(--font-body);
+}
+:root[data-theme="cyberpunk"] .featured .bookcover.size-lg:hover{ transform:none; box-shadow:0 0 30px -4px var(--acc,var(--accent)), inset 0 0 26px rgba(0,0,0,.5); }
+
+:root[data-theme="cyberpunk"] .chipcard,
+:root[data-theme="cyberpunk"] .singlecard{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-m);
+  box-shadow:0 0 16px -9px rgba(45,231,255,.25);
+}
+:root[data-theme="cyberpunk"] .chipcard:hover{ border-color:var(--accent); box-shadow:0 0 20px -6px rgba(45,231,255,.45); transform:translateY(-3px); }
+:root[data-theme="cyberpunk"] .singlecard:hover{ border-color:var(--accent); box-shadow:0 0 20px -6px rgba(45,231,255,.45); }
+:root[data-theme="cyberpunk"] .chipcard-reason{ font-family:var(--font-body); }
+
+:root[data-theme="cyberpunk"] .chips button,
+:root[data-theme="cyberpunk"] .segctl button,
+:root[data-theme="cyberpunk"] .modtabs button,
+:root[data-theme="cyberpunk"] .segtoggle button,
+:root[data-theme="cyberpunk"] .statuspill,
+:root[data-theme="cyberpunk"] .tab-lbl,
+:root[data-theme="cyberpunk"] .btn{
+  font-family:var(--font-body); text-transform:uppercase; letter-spacing:.07em;
+}
+:root[data-theme="cyberpunk"] .chips button[aria-pressed="true"]{ box-shadow:0 0 10px -2px rgba(45,231,255,.6); }
+:root[data-theme="cyberpunk"] .btn{ border-radius:var(--radius-s); }
+:root[data-theme="cyberpunk"] .btn.primary{
+  background:linear-gradient(180deg,#0f2130,#081420); border:1px solid var(--accent); color:var(--accent);
+  box-shadow:0 0 12px -4px rgba(45,231,255,.5);
+}
+:root[data-theme="cyberpunk"] .btn.primary:hover{ box-shadow:0 0 18px -2px rgba(45,231,255,.75); filter:brightness(1.1); }
+:root[data-theme="cyberpunk"] .btn.ghost{ border:1px solid var(--border); color:var(--text-dim); }
+:root[data-theme="cyberpunk"] .btn.ghost:hover{ border-color:var(--accent); color:var(--accent); }
+:root[data-theme="cyberpunk"] .donebtn{
+  background:linear-gradient(180deg,#0a2a1a,#06180f); border:1px solid var(--accent-ok); color:var(--accent-ok);
+  box-shadow:0 0 10px -4px rgba(51,255,156,.5);
+}
+:root[data-theme="cyberpunk"] .donebtn:hover{ box-shadow:0 0 16px -2px rgba(51,255,156,.7); }
+:root[data-theme="cyberpunk"] .stepbtn{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .stepbtn:hover{ border-color:var(--accent); color:var(--accent); }
+:root[data-theme="cyberpunk"] .statuspill[aria-pressed="true"]{ box-shadow:0 0 12px -2px color-mix(in srgb, currentColor 50%, transparent); }
+
+:root[data-theme="cyberpunk"] .series-group{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-m); }
+:root[data-theme="cyberpunk"] .series-head:hover{ background:var(--bg-elev); }
+:root[data-theme="cyberpunk"] .series-name{ font-family:var(--font-body); text-transform:uppercase; letter-spacing:.05em; }
+:root[data-theme="cyberpunk"] .book-title{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .book-sub{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .statusdot{ box-shadow:0 0 6px var(--dot); }
+
+:root[data-theme="cyberpunk"] .tabbar{ background:var(--tab-bg); border-top:1px solid var(--border); box-shadow:0 -1px 14px -4px rgba(45,231,255,.3); }
+:root[data-theme="cyberpunk"] .tab[aria-selected="true"]{ color:var(--accent); text-shadow:0 0 8px rgba(45,231,255,.6); }
+
+:root[data-theme="cyberpunk"] .fab{ animation:cpGlowPulse 2.6s ease-in-out infinite; }
+
+:root[data-theme="cyberpunk"] .modal{
+  border:1px solid var(--border); box-shadow:0 0 44px -10px rgba(45,231,255,.3);
+  border-bottom:none;
+}
+@media (min-width:620px){ :root[data-theme="cyberpunk"] .modal{ border-bottom:1px solid var(--border); } }
+:root[data-theme="cyberpunk"] .modal-x{ border:1px solid var(--border); }
+:root[data-theme="cyberpunk"] .modal-x:hover{ border-color:var(--accent); color:var(--accent); }
+:root[data-theme="cyberpunk"] .field input,
+:root[data-theme="cyberpunk"] .field select,
+:root[data-theme="cyberpunk"] .field textarea{ font-family:var(--font-body); }
+:root[data-theme="cyberpunk"] .field input:focus,
+:root[data-theme="cyberpunk"] .field select:focus,
+:root[data-theme="cyberpunk"] .field textarea:focus{ box-shadow:0 0 0 1px var(--accent), 0 0 10px -4px rgba(45,231,255,.5); }
+
+:root[data-theme="cyberpunk"] .statcard{ background:var(--bg-card); border:1px solid var(--border); box-shadow:0 0 14px -9px rgba(45,231,255,.25); }
+:root[data-theme="cyberpunk"] .statcard b{ text-shadow:0 0 8px rgba(45,231,255,.4); }
+:root[data-theme="cyberpunk"] .statcard span{ font-family:var(--font-body); }
+
+:root[data-theme="cyberpunk"] .setgroup{ background:var(--bg-card); border:1px solid var(--border); }
+:root[data-theme="cyberpunk"] .setgroup h3{ font-family:var(--font-body); letter-spacing:.08em; }
+
+:root[data-theme="cyberpunk"] .toast{
+  border:1px solid var(--accent); box-shadow:0 0 20px -6px rgba(45,231,255,.5);
+  font-family:var(--font-body); letter-spacing:.02em;
+}
+
+:root[data-theme="cyberpunk"] .themeopt[aria-pressed="true"]{ box-shadow:0 0 0 1px var(--accent), 0 0 14px -4px rgba(45,231,255,.5); }
