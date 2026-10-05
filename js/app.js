@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v76';
+const APP_VERSION='v77';
 
 S.load();
 

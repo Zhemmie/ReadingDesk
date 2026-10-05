@@ -147,7 +147,7 @@ function friendlyError(e){
   if(code>=500) return 'GitHub’s servers are having trouble right now. Try again shortly.';
   return 'Something went wrong talking to GitHub. Try again, and if it keeps happening, disconnect and reconnect.';
 }
-function ghFetch(url,opts){ opts=opts||{}; return fetch(url,Object.assign({},opts,{headers:Object.assign(
+function ghFetch(url,opts,keepalive){ opts=opts||{}; return fetch(url,Object.assign({},opts,{keepalive:!!keepalive,headers:Object.assign(
   {'Authorization':'Bearer '+syncToken,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}, opts.headers||{})})); }
 function gistSize(g){ let n=0; [GIST_FILE,GIST_PROG].forEach(f=>{ if(g.files&&g.files[f]) n+=g.files[f].size||0; }); return n; }
 async function findGist(){ const r=await ghFetch('https://api.github.com/gists?per_page=100'); if(!r.ok) return null;
@@ -170,18 +170,18 @@ function changedFiles(force){
   if(prog!==lastSent.prog) files[GIST_PROG]={content:prog};
   return {files, cat, prog};
 }
-async function createGist(force){ const {cat,prog}=changedFiles(force);
+async function createGist(force,keepalive){ const {cat,prog}=changedFiles(force);
   const body={description:'The Reading Desk data — synced automatically, do not edit by hand',public:false,
     files:{[GIST_FILE]:{content:cat},[GIST_PROG]:{content:prog}}};
-  const r=await ghFetch('https://api.github.com/gists',{method:'POST',body:JSON.stringify(body)});
+  const r=await ghFetch('https://api.github.com/gists',{method:'POST',body:JSON.stringify(body)},keepalive);
   if(!r.ok) throw new Error('create '+r.status); const j=await r.json();
   gistId=j.id; localStorage.setItem(S.SK_GIST,gistId); lastSent={cat,prog};
   clearDirty(); return j; }
-export async function pushNow(force){ if(!syncToken) return; if(!gistId){ await createGist(force); markSynced(); return; }
+export async function pushNow(force,keepalive){ if(!syncToken) return; if(!gistId){ await createGist(force,keepalive); markSynced(); return; }
   const {files,cat,prog}=changedFiles(force);
   if(!Object.keys(files).length){ clearDirty(); markSynced(); return; }
-  const r=await ghFetch('https://api.github.com/gists/'+gistId,{method:'PATCH',body:JSON.stringify({files})});
-  if(r.status===404){ gistId=''; localStorage.removeItem(S.SK_GIST); lastSent={cat:'',prog:''}; await createGist(force); markSynced(); return; }
+  const r=await ghFetch('https://api.github.com/gists/'+gistId,{method:'PATCH',body:JSON.stringify({files})},keepalive);
+  if(r.status===404){ gistId=''; localStorage.removeItem(S.SK_GIST); lastSent={cat:'',prog:''}; await createGist(force,keepalive); markSynced(); return; }
   if(!r.ok) throw new Error('push '+r.status);
   lastSent={cat,prog}; clearDirty(); markSynced(); }
 async function readGistFile(j,name){ const f=j.files&&j.files[name]; if(!f) return null;
@@ -202,6 +202,23 @@ function markDirty(){ if(!syncToken) return; dirty=true; notify(); }
 function clearDirty(){ dirty=false; notify(); }
 export function schedulePush(){ if(!syncToken) return; clearTimeout(pushTimer); pushTimer=setTimeout(()=>{ pushNow().then(notify).catch(e=>{ syncMsg=friendlyError(e); notify(); }); }, 2500); }
 S.onSave(()=>{ markDirty(); schedulePush(); });
+
+// The 2.5s debounce above exists to batch rapid-fire edits into one API
+// call, but it's just a setTimeout — if the tab gets backgrounded or the
+// PWA gets swiped away before it fires (the common case on a phone: mark a
+// book done, then immediately switch apps), the scheduled push never runs
+// and the change just sits there until something syncs again. Flush
+// immediately on both signals, with keepalive so the request has a chance
+// to actually finish while the page is being torn down.
+function flushPendingPush(){
+  if(!syncToken || !dirty || syncing) return;
+  clearTimeout(pushTimer); pushTimer=null;
+  pushNow(false,true).then(notify).catch(e=>{ syncMsg=friendlyError(e); notify(); });
+}
+if(typeof document!=='undefined'){
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushPendingPush(); });
+  window.addEventListener('pagehide',flushPendingPush);
+}
 
 export async function syncNow(manual){
   if(!syncToken){ syncMsg='Add a token to connect.'; notify(); return; }
