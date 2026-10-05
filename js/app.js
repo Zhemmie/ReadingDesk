@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v77';
+const APP_VERSION='v78';
 
 S.load();
 
@@ -1483,6 +1483,51 @@ function openAddSeriesModal(seriesName){
   });
 }
 
+// ---------- "finished a book" modal ----------
+// hitting "Finished" used to just flip the status with a toast — no chance
+// to rate it or jot a note while it's fresh. This brings back a dedicated
+// step for that: star rating, the finished date (defaults to today), and
+// an optional note, all saved together when you confirm.
+let finishBookId=null, finishRating=0, finishDate='';
+function finishModalHtml(){
+  const found=S.bookById(finishBookId);
+  if(!found) return '<h3>Finished</h3><div class="empty-row">That book isn’t in your library anymore.</div>';
+  const {s,b}=found; const standalone=s.series==='Standalone';
+  return `<h3>Finished</h3>
+    <div class="sub" style="margin:0 0 14px">${esc(S.displayTitle(b))}${standalone?'':' &mdash; '+esc(s.series)}</div>
+    <div class="field"><label>Your rating</label>
+      <div class="stars" role="group" aria-label="Your rating">
+        ${[1,2,3,4,5].map(i=>`<button type="button" data-act="finish-rate" data-n="${i}" class="${i<=finishRating?'on':''}" aria-label="${i} star">&#9733;</button>`).join('')}
+      </div>
+    </div>
+    <div class="field"><label for="finishDate">Finished</label><input id="finishDate" type="date" value="${esc(finishDate)}"></div>
+    <div class="field"><label for="finishNotes">Notes (optional)</label>
+      <textarea id="finishNotes" placeholder="Thoughts, quotes, how it landed&hellip;"></textarea>
+    </div>
+    <div class="btnrow">
+      <button type="button" class="btn ghost" data-act="close">Cancel</button>
+      <button type="button" class="btn primary" data-act="finish-save">Save &amp; finish</button>
+    </div>`;
+}
+function rerenderFinishModal(){ if(!modalCtx) return; modalCtx.m.querySelector('.modal-body').innerHTML=finishModalHtml(); }
+function openFinishModal(id){
+  const found=S.bookById(id); if(!found){ S.markRead(id); refreshView(); toast('Marked finished ✓'); return; }
+  finishBookId=id; finishRating=S.ratings[id]||0; finishDate=S.det(id).finished||S.today();
+  showModal(finishModalHtml(),{
+    onAction:(t)=>{
+      if(t.dataset.act==='finish-rate'){
+        const n=+t.dataset.n; finishRating=(finishRating===n?0:n); rerenderFinishModal(); return;
+      }
+      if(t.dataset.act==='finish-save'){
+        const dateVal=document.getElementById('finishDate').value||S.today();
+        const noteVal=(document.getElementById('finishNotes').value||'').trim();
+        S.finishBook(finishBookId,{rating:finishRating,finished:dateVal,note:noteVal});
+        closeModal(); refreshView(); toast('Marked finished ✓');
+        return;
+      }
+    }
+  });
+}
 function seriesDatalistHtml(){
   const seriesNames=S.catalog.series.filter(x=>x.series!=='Standalone').map(x=>x.series);
   return `<datalist id="seriesList">${seriesNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
@@ -1628,7 +1673,7 @@ document.getElementById('view').addEventListener('click',e=>{
   const act=t.dataset.act, id=t.dataset.id;
   if(act==='open') openDetail(id);
   else if(act==='step'){ const d=S.det(id); const next=Math.max(0,(d.pcur||0)+(+t.dataset.delta)); S.setPages(id,'pcur',next); refreshView(); }
-  else if(act==='finish'){ S.markRead(id); refreshView(); toast('Marked finished ✓'); }
+  else if(act==='finish'){ openFinishModal(id); }
   else if(act==='pgcur-edit'){ startPcurEdit(t,id); }
   else if(act==='reminders-open') openReminders();
   else if(act==='goal-open') openGoalModal();

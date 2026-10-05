@@ -292,6 +292,17 @@ export function getTasteDiveProxy(){ return localStorage.getItem(K_TASTE_PROXY)|
 export function setTasteDiveProxy(u){ u=(u||'').trim().replace(/\/$/,''); try{ if(u) localStorage.setItem(K_TASTE_PROXY,u); else localStorage.removeItem(K_TASTE_PROXY); }catch(e){} }
 export function markRead(id){ status[id]='read'; if(!det(id).finished) det(id).finished=today();
   markActiveToday(); clearCoverIfDone(id); touch(id); sSt(); sDet(); }
+// one atomic save for the "Finished" rating/notes prompt: status + finished
+// date + rating + an optional note together, rather than the caller poking
+// each piece in separately (and risking setRating's own toggle-off behavior
+// firing when the rating passed in is just the pre-existing one, untouched)
+export function finishBook(id,{rating,finished,note}={}){
+  markRead(id);
+  if(finished) det(id).finished=finished;
+  if(rating>0) ratings[id]=rating; else delete ratings[id];
+  touch(id); sDet(); sRt();
+  if(note) addNote(id,note);
+}
 export function setPages(id,which,val){ const d=det(id); const n=Math.max(0,Math.round(+val||0));
   d[which]=n||undefined; if(!n) delete d[which]; if(which==='pcur') d.pcurAt=Date.now();
   touch(id); sDet(); markActiveToday(); }
