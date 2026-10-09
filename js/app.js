@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v78';
+const APP_VERSION='v79';
 
 S.load();
 
@@ -1888,6 +1888,7 @@ setInterval(checkReminders,60000);
 
 // ================= boot =================
 S.onSave(()=> refreshView());
+S.onExternalChange(()=> refreshView());
 Sync.onSyncChange(()=> refreshView());
 renderView();
 checkReminders();

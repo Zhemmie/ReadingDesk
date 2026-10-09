@@ -129,6 +129,31 @@ export function sRem(){ if(!mem){try{localStorage.setItem(K_REM,JSON.stringify(r
 export function saveDays(){ if(!mem){ try{ localStorage.setItem(K_DAYS,JSON.stringify(activeDays)); }catch(e){} } }
 export function markActiveToday(){ const day=ymd(new Date()); if(!activeDays[day]){ activeDays[day]=true; saveDays(); onDataSaved(); } }
 
+// ---------- cross-tab awareness ----------
+// Every s*() above does a blind whole-object overwrite of its localStorage
+// key — fine with one live context, but there's nothing stopping a SECOND
+// same-origin context (a Safari tab left open behind the installed
+// home-screen app, or an old tab iOS suspended instead of killing) from
+// still holding an older in-memory snapshot. The moment that stale context
+// saves anything at all — even something unrelated, on a different book —
+// it flushes its outdated copy over whatever a fresher context already
+// wrote, silently reverting it. No sync or multiple devices needed for
+// this; it's purely a same-device, same-origin race.
+// The 'storage' event fires in every OTHER same-origin document whenever
+// localStorage changes (never in the document that made the change), which
+// is exactly the signal needed to catch a stale context up before it gets
+// a chance to do that.
+const DATA_KEYS=new Set([K_CAT,K_ST,K_RT,K_DET,K_NOTES,K_REM,K_META]);
+const onExternalCbs=[];
+export function onExternalChange(cb){ onExternalCbs.push(cb); }
+if(typeof window!=='undefined'){
+  window.addEventListener('storage',e=>{
+    if(!e.key || !DATA_KEYS.has(e.key)) return;
+    load();
+    onExternalCbs.forEach(cb=>cb());
+  });
+}
+
 // ---------- dates ----------
 export function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 export function today(){ return ymd(new Date()); }
