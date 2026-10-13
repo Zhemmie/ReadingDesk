@@ -220,6 +220,26 @@ if(typeof document!=='undefined'){
   window.addEventListener('pagehide',flushPendingPush);
 }
 
+// Auto-pull the other direction too: catching up on changes made elsewhere
+// used to only happen when someone remembered to tap "Sync now" — easy to
+// forget, and the whole point of sync is not having to think about it.
+// Runs once right after boot (app.js calls this after S.load() so there's
+// already-loaded local data to merge against, not a blank slate) and again
+// every time the tab/PWA comes back to the foreground, since that's exactly
+// when it's stale: it's been sitting in the background while another
+// device made changes. Throttled so flipping between apps repeatedly
+// doesn't hammer the API with redundant requests.
+const AUTO_SYNC_MIN_GAP=20000;
+let lastAutoSyncAttempt=0;
+export function autoSyncIfDue(){
+  if(!syncToken || syncing) return;
+  const now=Date.now(); if(now-lastAutoSyncAttempt<AUTO_SYNC_MIN_GAP) return;
+  lastAutoSyncAttempt=now; syncNow();
+}
+if(typeof document!=='undefined'){
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') autoSyncIfDue(); });
+}
+
 export async function syncNow(manual){
   if(!syncToken){ syncMsg='Add a token to connect.'; notify(); return; }
   if(syncing) return; syncing=true; syncMsg='Syncing…'; notify();
