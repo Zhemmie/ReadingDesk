@@ -1892,6 +1892,6 @@ S.onExternalChange(()=> refreshView());
 Sync.onSyncChange(()=> refreshView());
 renderView();
 checkReminders();
-Sync.autoSyncIfDue();
-if(S.backupDue()){ setTimeout(()=>toast('It has been a while since you saved a backup.','Save one',()=>{
-  setView('settings'); document.getElementById('view').querySelector('[data-act="backup-save"]')?.click(); }),1500); }
+Sync.autoSyncIfDue();}
+//if(S.backupDue()){ setTimeout(()=>toast('It has been a while since you saved a backup.','Save one',()=>{
+  //setView('settings'); document.getElementById('view').querySelector('[data-act="backup-save"]')?.click(); }),1500); }
