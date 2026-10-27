@@ -11,7 +11,7 @@ import * as Discover from './discover.js';
 
 // bump alongside the CACHE version in sw.js — shown in Settings so you can
 // confirm a device actually picked up a new deploy after refreshing
-const APP_VERSION='v81';
+const APP_VERSION='v82';
 
 S.load();
 
@@ -1892,6 +1892,6 @@ S.onExternalChange(()=> refreshView());
 Sync.onSyncChange(()=> refreshView());
 renderView();
 checkReminders();
-Sync.autoSyncIfDue();}
+Sync.autoSyncIfDue(); }
 //if(S.backupDue()){ setTimeout(()=>toast('It has been a while since you saved a backup.','Save one',()=>{
   //setView('settings'); document.getElementById('view').querySelector('[data-act="backup-save"]')?.click(); }),1500); }
